@@ -90,7 +90,6 @@ find_package(Boost REQUIRED COMPONENTS
              program_options
              filesystem
              graph
-             regex
              system
              unit_test_framework)
 
@@ -100,6 +99,7 @@ find_package(FreeImage REQUIRED)
 
 find_package(Glog REQUIRED)
 
+set(OpenGL_GL_PREFERENCE GLVND)
 find_package(OpenGL REQUIRED)
 find_package(Glew REQUIRED)
 find_package(Git)
@@ -154,6 +154,10 @@ if(IS_MSVC)
 endif()
 
 if(IS_GNU)
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.9)
+        message(FATAL_ERROR "GCC version 4.8 or older not supported")
+    endif()
+
     # Hide incorrect warnings for uninitialized Eigen variables under GCC.
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-maybe-uninitialized")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-maybe-uninitialized")
@@ -278,13 +282,11 @@ set(COLMAP_EXTERNAL_LIBRARIES
     ${CMAKE_DL_LIBS}
     ${Boost_FILESYSTEM_LIBRARY}
     ${Boost_PROGRAM_OPTIONS_LIBRARY}
-    ${Boost_REGEX_LIBRARY}
     ${Boost_SYSTEM_LIBRARY}
     ${GLOG_LIBRARIES}
     ${FREEIMAGE_LIBRARIES}
     ${CERES_LIBRARIES}
-    ${OPENGL_gl_LIBRARY}
-    ${OPENGL_glu_LIBRARY}
+    ${OPENGL_LIBRARIES}
     ${Qt5Core_LIBRARIES}
     ${Qt5OpenGL_LIBRARIES}
     ${Qt5Widgets_LIBRARIES}
