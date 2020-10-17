@@ -77,6 +77,22 @@ struct FeatureKeypoint {
   float a22;
 };
 
+struct FeatureLineSegment {
+  FeatureLineSegment();
+  FeatureLineSegment(const float x1, const float y1, const float x2, const float y2);
+  
+  // Rescale the feature location and shape size by the given scale factor.
+  void Rescale(const float scale);
+  void Rescale(const float scale_x, const float scale_y);
+
+  // Location of the feature, with the origin at the upper left image corner,
+  // i.e. the upper left pixel has the coordinate (0.5, 0.5).
+  float x1;
+  float y1;
+  float x2;
+  float y2;  
+};
+
 typedef Eigen::Matrix<uint8_t, 1, Eigen::Dynamic, Eigen::RowMajor>
     FeatureDescriptor;
 
@@ -94,6 +110,7 @@ struct FeatureMatch {
 };
 
 typedef std::vector<FeatureKeypoint> FeatureKeypoints;
+typedef std::vector<FeatureLineSegment> FeatureLineSegments;
 typedef Eigen::Matrix<uint8_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
     FeatureDescriptors;
 typedef std::vector<FeatureMatch> FeatureMatches;

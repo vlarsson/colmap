@@ -42,6 +42,8 @@ namespace {
 
 typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
     FeatureKeypointsBlob;
+typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+    FeatureLineSegmentBlob;    
 typedef Eigen::Matrix<uint8_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
     FeatureDescriptorsBlob;
 typedef Eigen::Matrix<point2D_t, Eigen::Dynamic, 2, Eigen::RowMajor>
@@ -85,6 +87,19 @@ FeatureKeypoints FeatureKeypointsFromBlob(const FeatureKeypointsBlob& blob) {
     LOG(FATAL) << "Keypoint format not supported";
   }
   return keypoints;
+}
+
+FeatureLineSegments FeatureLineSegmentsFromBlob(const FeatureLineSegmentBlob& blob) {
+  FeatureLineSegments line_segs(static_cast<size_t>(blob.rows()));
+  if (blob.cols() == 4) {
+    for (FeatureLineSegmentBlob::Index i = 0; i < blob.rows(); ++i) {
+      line_segs[i] =
+          FeatureLineSegment(blob(i, 0), blob(i, 1), blob(i, 2), blob(i, 3));
+    }  
+  } else {
+    LOG(FATAL) << "Line segment format not supported";
+  }
+  return line_segs;
 }
 
 FeatureMatchesBlob FeatureMatchesToBlob(const FeatureMatches& matches) {
@@ -441,6 +456,18 @@ FeatureKeypoints Database::ReadKeypoints(const image_t image_id) const {
   return FeatureKeypointsFromBlob(blob);
 }
 
+FeatureLineSegments Database::ReadLineSegments(const image_t image_id) const {
+  SQLITE3_CALL(sqlite3_bind_int64(sql_stmt_read_line_segments_, 1, image_id));
+
+  const int rc = SQLITE3_CALL(sqlite3_step(sql_stmt_read_line_segments_));
+  const FeatureKeypointsBlob blob = ReadDynamicMatrixBlob<FeatureLineSegmentBlob>(
+      sql_stmt_read_line_segments_, rc, 0);
+
+  SQLITE3_CALL(sqlite3_reset(sql_stmt_read_line_segments_));
+
+  return FeatureLineSegmentsFromBlob(blob);
+}
+
 FeatureDescriptors Database::ReadDescriptors(const image_t image_id) const {
   SQLITE3_CALL(sqlite3_bind_int64(sql_stmt_read_descriptors_, 1, image_id));
 
@@ -586,6 +613,43 @@ void Database::ReadTwoViewGeometryNumInliers(
   }
 
   SQLITE3_CALL(sqlite3_reset(sql_stmt_read_two_view_geometry_num_inliers_));
+}
+
+FeatureMatches Database::ReadLineMatches(image_t image_id1,
+                                     image_t image_id2) const {
+  const image_pair_t pair_id = ImagePairToPairId(image_id1, image_id2);
+  SQLITE3_CALL(sqlite3_bind_int64(sql_stmt_read_line_matches_, 1, pair_id));
+
+  const int rc = SQLITE3_CALL(sqlite3_step(sql_stmt_read_line_matches_));
+  FeatureMatchesBlob blob =
+      ReadDynamicMatrixBlob<FeatureMatchesBlob>(sql_stmt_read_line_matches_, rc, 0);
+
+  SQLITE3_CALL(sqlite3_reset(sql_stmt_read_line_matches_));
+
+  if (SwapImagePair(image_id1, image_id2)) {
+    SwapFeatureMatchesBlob(&blob);
+  }
+
+  return FeatureMatchesFromBlob(blob);
+}
+
+std::vector<std::pair<image_pair_t, FeatureMatches>> Database::ReadAllLineMatches()
+    const {
+  std::vector<std::pair<image_pair_t, FeatureMatches>> all_matches;
+
+  int rc;
+  while ((rc = SQLITE3_CALL(sqlite3_step(sql_stmt_read_line_matches_all_))) ==
+         SQLITE_ROW) {
+    const image_pair_t pair_id = static_cast<image_pair_t>(
+        sqlite3_column_int64(sql_stmt_read_line_matches_all_, 0));
+    const FeatureMatchesBlob blob = ReadDynamicMatrixBlob<FeatureMatchesBlob>(
+        sql_stmt_read_line_matches_all_, rc, 1);
+    all_matches.emplace_back(pair_id, FeatureMatchesFromBlob(blob));
+  }
+
+  SQLITE3_CALL(sqlite3_reset(sql_stmt_read_line_matches_all_));
+
+  return all_matches;
 }
 
 camera_t Database::WriteCamera(const Camera& camera,
@@ -942,6 +1006,11 @@ void Database::PrepareSQLStatements() {
                                   &sql_stmt_num_keypoints_, 0));
   sql_stmts_.push_back(sql_stmt_num_keypoints_);
 
+  sql = "SELECT rows FROM line_segments WHERE image_id = ?;";
+  SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
+                                  &sql_stmt_num_line_segments_, 0));
+  sql_stmts_.push_back(sql_stmt_num_line_segments_);
+
   sql = "SELECT rows FROM descriptors WHERE image_id = ?;";
   SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
                                   &sql_stmt_num_descriptors_, 0));
@@ -970,6 +1039,11 @@ void Database::PrepareSQLStatements() {
                                   &sql_stmt_exists_keypoints_, 0));
   sql_stmts_.push_back(sql_stmt_exists_keypoints_);
 
+  sql = "SELECT 1 FROM line_segments WHERE image_id = ?;";
+  SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
+                                  &sql_stmt_exists_line_segments_, 0));
+  sql_stmts_.push_back(sql_stmt_exists_line_segments_);
+
   sql = "SELECT 1 FROM descriptors WHERE image_id = ?;";
   SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
                                   &sql_stmt_exists_descriptors_, 0));
@@ -979,6 +1053,11 @@ void Database::PrepareSQLStatements() {
   SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
                                   &sql_stmt_exists_matches_, 0));
   sql_stmts_.push_back(sql_stmt_exists_matches_);
+
+  sql = "SELECT 1 FROM line_matches WHERE pair_id = ?;";
+  SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
+                                  &sql_stmt_exists_line_matches_, 0));
+  sql_stmts_.push_back(sql_stmt_exists_line_matches_);
 
   sql = "SELECT 1 FROM two_view_geometries WHERE pair_id = ?;";
   SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
@@ -1054,6 +1133,11 @@ void Database::PrepareSQLStatements() {
                                   &sql_stmt_read_keypoints_, 0));
   sql_stmts_.push_back(sql_stmt_read_keypoints_);
 
+  sql = "SELECT rows, cols, data FROM line_segments WHERE image_id = ?;";
+  SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
+                                  &sql_stmt_read_line_segments_, 0));
+  sql_stmts_.push_back(sql_stmt_read_line_segments_);
+
   sql = "SELECT rows, cols, data FROM descriptors WHERE image_id = ?;";
   SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
                                   &sql_stmt_read_descriptors_, 0));
@@ -1068,6 +1152,16 @@ void Database::PrepareSQLStatements() {
   SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
                                   &sql_stmt_read_matches_all_, 0));
   sql_stmts_.push_back(sql_stmt_read_matches_all_);
+
+  sql = "SELECT rows, cols, data FROM line_matches WHERE pair_id = ?;";
+  SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
+                                  &sql_stmt_read_line_matches_, 0));
+  sql_stmts_.push_back(sql_stmt_read_line_matches_);
+
+  sql = "SELECT * FROM line_matches WHERE rows > 0;";
+  SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
+                                  &sql_stmt_read_line_matches_all_, 0));
+  sql_stmts_.push_back(sql_stmt_read_line_matches_all_);
 
   sql =
       "SELECT rows, cols, data, config, F, E, H FROM two_view_geometries WHERE "
@@ -1095,6 +1189,11 @@ void Database::PrepareSQLStatements() {
                                   &sql_stmt_write_keypoints_, 0));
   sql_stmts_.push_back(sql_stmt_write_keypoints_);
 
+  sql = "INSERT INTO line_segments(image_id, rows, cols, data) VALUES(?, ?, ?, ?);";
+  SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
+                                  &sql_stmt_write_line_segments_, 0));
+  sql_stmts_.push_back(sql_stmt_write_line_segments_);
+
   sql =
       "INSERT INTO descriptors(image_id, rows, cols, data) VALUES(?, ?, ?, ?);";
   SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
@@ -1105,6 +1204,11 @@ void Database::PrepareSQLStatements() {
   SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
                                   &sql_stmt_write_matches_, 0));
   sql_stmts_.push_back(sql_stmt_write_matches_);
+
+  sql = "INSERT INTO line_matches(pair_id, rows, cols, data) VALUES(?, ?, ?, ?);";
+  SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
+                                  &sql_stmt_write_line_matches_, 0));
+  sql_stmts_.push_back(sql_stmt_write_line_matches_);
 
   sql =
       "INSERT INTO two_view_geometries(pair_id, rows, cols, data, config, F, "
@@ -1121,6 +1225,11 @@ void Database::PrepareSQLStatements() {
                                   &sql_stmt_delete_matches_, 0));
   sql_stmts_.push_back(sql_stmt_delete_matches_);
 
+  sql = "DELETE FROM line_matches WHERE pair_id = ?;";
+  SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
+                                  &sql_stmt_delete_line_matches_, 0));
+  sql_stmts_.push_back(sql_stmt_delete_line_matches_);
+
   sql = "DELETE FROM two_view_geometries WHERE pair_id = ?;";
   SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
                                   &sql_stmt_delete_two_view_geometry_, 0));
@@ -1133,6 +1242,11 @@ void Database::PrepareSQLStatements() {
   SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
                                   &sql_stmt_clear_matches_, 0));
   sql_stmts_.push_back(sql_stmt_clear_matches_);
+
+  sql = "DELETE FROM matches;";
+  SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
+                                  &sql_stmt_clear_line_matches_, 0));
+  sql_stmts_.push_back(sql_stmt_clear_line_matches_);
 
   sql = "DELETE FROM two_view_geometries;";
   SQLITE3_CALL(sqlite3_prepare_v2(database_, sql.c_str(), -1,
@@ -1153,6 +1267,8 @@ void Database::CreateTables() const {
   CreateDescriptorsTable();
   CreateMatchesTable();
   CreateTwoViewGeometriesTable();
+  CreateLinesTable();
+  CreateLineMatchesTable();
 }
 
 void Database::CreateCameraTable() const {
@@ -1242,6 +1358,30 @@ void Database::CreateTwoViewGeometriesTable() const {
         "    H        BLOB);";
     SQLITE3_EXEC(database_, sql.c_str(), nullptr);
   }
+}
+
+
+void Database::CreateLinesTable() const {
+  const std::string sql =
+      "CREATE TABLE IF NOT EXISTS line_segments"
+      "   (image_id  INTEGER  PRIMARY KEY  NOT NULL,"
+      "    rows      INTEGER               NOT NULL,"
+      "    cols      INTEGER               NOT NULL,"
+      "    data      BLOB,"
+      "FOREIGN KEY(image_id) REFERENCES images(image_id) ON DELETE CASCADE);";
+
+  SQLITE3_EXEC(database_, sql.c_str(), nullptr);
+}
+
+void Database::CreateLineMatchesTable() const {
+  const std::string sql =
+      "CREATE TABLE IF NOT EXISTS line_matches"
+      "   (pair_id  INTEGER  PRIMARY KEY  NOT NULL,"
+      "    rows     INTEGER               NOT NULL,"
+      "    cols     INTEGER               NOT NULL,"
+      "    data     BLOB);";
+
+  SQLITE3_EXEC(database_, sql.c_str(), nullptr);
 }
 
 void Database::UpdateSchema() const {

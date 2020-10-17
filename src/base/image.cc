@@ -82,6 +82,19 @@ void Image::SetPoints2D(const std::vector<class Point2D>& points) {
   num_correspondences_have_point3D_.resize(points.size(), 0);
 }
 
+void Image::SetLines2D(const std::vector<std::pair<Eigen::Vector2d, Eigen::Vector2d>>& lines) {
+  CHECK(lines2D_.empty());
+  lines2D_.resize(lines.size());
+  for (point2D_t line2D_idx = 0; line2D_idx < lines.size(); ++line2D_idx) {
+    lines2D_[line2D_idx].SetXY(lines[line2D_idx].first, lines[line2D_idx].second);
+  }
+}
+
+void Image::SetLines2D(const std::vector<class Line2D>& lines) {
+  CHECK(lines2D_.empty());
+  lines2D_ = lines;
+}
+
 void Image::SetPoint3DForPoint2D(const point2D_t point2D_idx,
                                  const point3D_t point3D_id) {
   CHECK_NE(point3D_id, kInvalidPoint3DId);

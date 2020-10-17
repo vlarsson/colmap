@@ -100,6 +100,22 @@ void DatabaseCache::Load(const Database& database, const size_t min_num_matches,
   };
 
   //////////////////////////////////////////////////////////////////////////////
+  // Load line segment matches
+  //////////////////////////////////////////////////////////////////////////////
+
+  timer.Restart();
+  std::cout << "Loading line matches..." << std::flush;
+
+
+  std::vector<std::pair<image_pair_t, FeatureMatches>> line_matches = 
+      database.ReadAllLineMatches();
+
+  std::cout << StringPrintf(" %d in %.3fs", line_matches.size(),
+                            timer.ElapsedSeconds())
+            << std::endl;
+
+
+  //////////////////////////////////////////////////////////////////////////////
   // Load images
   //////////////////////////////////////////////////////////////////////////////
 
@@ -125,6 +141,7 @@ void DatabaseCache::Load(const Database& database, const size_t min_num_matches,
     }
 
     // Collect all images that are connected in the correspondence graph.
+    // TODO: Maybe consider line matches here as well?
     std::unordered_set<image_t> connected_image_ids;
     connected_image_ids.reserve(image_ids.size());
     for (size_t i = 0; i < image_pair_ids.size(); ++i) {
@@ -146,11 +163,23 @@ void DatabaseCache::Load(const Database& database, const size_t min_num_matches,
       if (image_ids.count(image.ImageId()) > 0 &&
           connected_image_ids.count(image.ImageId()) > 0) {
         images_.emplace(image.ImageId(), image);
+
+        // Read 2D points
         const FeatureKeypoints keypoints =
             database.ReadKeypoints(image.ImageId());
         const std::vector<Eigen::Vector2d> points =
             FeatureKeypointsToPointsVector(keypoints);
         images_[image.ImageId()].SetPoints2D(points);
+
+
+        // Read line segments
+        const FeatureLineSegments line_segs =
+           database.ReadLineSegments(image.ImageId());
+
+        const std::vector<std::pair<Eigen::Vector2d, Eigen::Vector2d>> lines =
+            FeatureLineSegmentsToPointPairVector(line_segs);
+        images_[image.ImageId()].SetLines2D(lines);
+
       }
     }
 
@@ -169,8 +198,10 @@ void DatabaseCache::Load(const Database& database, const size_t min_num_matches,
 
   for (const auto& image : images_) {
     correspondence_graph_.AddImage(image.first, image.second.NumPoints2D());
+    line_correspondence_graph_.AddImage(image.first, image.second.NumLines2D());
   }
 
+  // Setup point to point correspondences
   size_t num_ignored_image_pairs = 0;
   for (size_t i = 0; i < image_pair_ids.size(); ++i) {
     if (UseInlierMatchesCheck(two_view_geometries[i])) {
@@ -187,8 +218,21 @@ void DatabaseCache::Load(const Database& database, const size_t min_num_matches,
       num_ignored_image_pairs += 1;
     }
   }
-
   correspondence_graph_.Finalize();
+
+  // Setup line to line correspondences
+  for(auto& pair : line_matches) {
+    image_t image_id1;
+    image_t image_id2;
+    Database::PairIdToImagePair(pair.first, &image_id1, &image_id2);
+    if (image_ids.count(image_id1) > 0 && image_ids.count(image_id2) > 0) {
+      line_correspondence_graph_.AddCorrespondences(
+          image_id1, image_id2, pair.second);
+    } else {
+      num_ignored_image_pairs += 1;
+    }
+  }
+  line_correspondence_graph_.Finalize();
 
   // Set number of observations and correspondences per image.
   for (auto& image : images_) {

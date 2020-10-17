@@ -104,4 +104,24 @@ float FeatureKeypoint::ComputeShear() const {
   return std::atan2(-a12, a22) - ComputeOrientation();
 }
 
+
+FeatureLineSegment::FeatureLineSegment()
+    : FeatureLineSegment(0, 0, 0, 0) {}
+
+FeatureLineSegment::FeatureLineSegment(const float x1_, const float y1_,const float x2_, const float y2_)
+    : x1(x1_), y1(y1_), x2(x2_), y2(y2_) {}
+
+void FeatureLineSegment::Rescale(const float scale) {
+  Rescale(scale, scale);
+}
+
+void FeatureLineSegment::Rescale(const float scale_x, const float scale_y) {
+  CHECK_GT(scale_x, 0);
+  CHECK_GT(scale_y, 0);
+  x1 *= scale_x;
+  y2 *= scale_y;
+  x1 *= scale_x;
+  y2 *= scale_y; 
+}
+
 }  // namespace colmap

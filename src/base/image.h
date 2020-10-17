@@ -39,6 +39,7 @@
 
 #include "base/camera.h"
 #include "base/point2d.h"
+#include "base/line2d.h"
 #include "base/visibility_pyramid.h"
 #include "util/alignment.h"
 #include "util/logging.h"
@@ -83,6 +84,9 @@ class Image {
 
   // Get the number of image points.
   inline point2D_t NumPoints2D() const;
+
+  // Get the number of 2d line segments.
+  inline point2D_t NumLines2D() const;
 
   // Get the number of triangulations, i.e. the number of points that
   // are part of a 3D point track.
@@ -147,6 +151,12 @@ class Image {
   inline const std::vector<class Point2D>& Points2D() const;
   void SetPoints2D(const std::vector<Eigen::Vector2d>& points);
   void SetPoints2D(const std::vector<class Point2D>& points);
+
+  inline const class Line2D& Line2D(const point2D_t line2D_idx) const;
+  inline class Line2D& Line2D(const point2D_t line2D_idx);
+  inline const std::vector<class Line2D>& Lines2D() const;
+  void SetLines2D(const std::vector<std::pair<Eigen::Vector2d,Eigen::Vector2d>>& lines);
+  void SetLines2D(const std::vector<class Line2D>& lines);
 
   // Set the point as triangulated, i.e. it is part of a 3D point track.
   void SetPoint3DForPoint2D(const point2D_t point2D_idx,
@@ -236,6 +246,9 @@ class Image {
   // All image points, including points that are not part of a 3D point track.
   std::vector<class Point2D> points2D_;
 
+  // All image line segments, including points that are not part of a 3D line track.
+  std::vector<class Line2D> lines2D_;
+
   // Per image point, the number of correspondences that have a 3D point.
   std::vector<image_t> num_correspondences_have_point3D_;
 
@@ -273,6 +286,10 @@ void Image::SetRegistered(const bool registered) { registered_ = registered; }
 
 point2D_t Image::NumPoints2D() const {
   return static_cast<point2D_t>(points2D_.size());
+}
+
+point2D_t Image::NumLines2D() const {
+  return static_cast<point2D_t>(lines2D_.size());
 }
 
 point2D_t Image::NumPoints3D() const { return num_points3D_; }
@@ -352,6 +369,17 @@ class Point2D& Image::Point2D(const point2D_t point2D_idx) {
 }
 
 const std::vector<class Point2D>& Image::Points2D() const { return points2D_; }
+
+
+const class Line2D& Image::Line2D(const point2D_t line2D_idx) const {
+  return lines2D_.at(line2D_idx);
+}
+
+class Line2D& Image::Line2D(const point2D_t line2D_idx) {
+  return lines2D_.at(line2D_idx);
+}
+
+const std::vector<class Line2D>& Image::Lines2D() const { return lines2D_; }
 
 bool Image::IsPoint3DVisible(const point2D_t point2D_idx) const {
   return num_correspondences_have_point3D_.at(point2D_idx) > 0;

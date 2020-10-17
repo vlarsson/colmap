@@ -148,10 +148,15 @@ class Database {
 
   FeatureKeypoints ReadKeypoints(const image_t image_id) const;
   FeatureDescriptors ReadDescriptors(const image_t image_id) const;
+  FeatureLineSegments ReadLineSegments(const image_t image_id) const;
 
   FeatureMatches ReadMatches(const image_t image_id1,
                              const image_t image_id2) const;
   std::vector<std::pair<image_pair_t, FeatureMatches>> ReadAllMatches() const;
+
+  FeatureMatches ReadLineMatches(const image_t image_id1,
+                             const image_t image_id2) const;
+  std::vector<std::pair<image_pair_t, FeatureMatches>> ReadAllLineMatches() const;
 
   TwoViewGeometry ReadTwoViewGeometry(const image_t image_id1,
                                       const image_t image_id2) const;
@@ -164,6 +169,7 @@ class Database {
   void ReadTwoViewGeometryNumInliers(
       std::vector<std::pair<image_t, image_t>>* image_pairs,
       std::vector<int>* num_inliers) const;
+
 
   // Add new camera and return its database identifier. If `use_camera_id`
   // is false a new identifier is automatically generated.
@@ -234,6 +240,8 @@ class Database {
   void CreateKeypointsTable() const;
   void CreateDescriptorsTable() const;
   void CreateMatchesTable() const;
+  void CreateLinesTable() const;  
+  void CreateLineMatchesTable() const;
   void CreateTwoViewGeometriesTable() const;
 
   void UpdateSchema() const;
@@ -269,6 +277,7 @@ class Database {
 
   // num_*
   sqlite3_stmt* sql_stmt_num_keypoints_ = nullptr;
+  sqlite3_stmt* sql_stmt_num_line_segments_ = nullptr;
   sqlite3_stmt* sql_stmt_num_descriptors_ = nullptr;
 
   // exists_*
@@ -276,8 +285,10 @@ class Database {
   sqlite3_stmt* sql_stmt_exists_image_id_ = nullptr;
   sqlite3_stmt* sql_stmt_exists_image_name_ = nullptr;
   sqlite3_stmt* sql_stmt_exists_keypoints_ = nullptr;
+  sqlite3_stmt* sql_stmt_exists_line_segments_ = nullptr;
   sqlite3_stmt* sql_stmt_exists_descriptors_ = nullptr;
   sqlite3_stmt* sql_stmt_exists_matches_ = nullptr;
+  sqlite3_stmt* sql_stmt_exists_line_matches_ = nullptr;
   sqlite3_stmt* sql_stmt_exists_two_view_geometry_ = nullptr;
 
   // add_*
@@ -295,25 +306,32 @@ class Database {
   sqlite3_stmt* sql_stmt_read_image_name_ = nullptr;
   sqlite3_stmt* sql_stmt_read_images_ = nullptr;
   sqlite3_stmt* sql_stmt_read_keypoints_ = nullptr;
+  sqlite3_stmt* sql_stmt_read_line_segments_ = nullptr;
   sqlite3_stmt* sql_stmt_read_descriptors_ = nullptr;
   sqlite3_stmt* sql_stmt_read_matches_ = nullptr;
   sqlite3_stmt* sql_stmt_read_matches_all_ = nullptr;
+  sqlite3_stmt* sql_stmt_read_line_matches_ = nullptr;
+  sqlite3_stmt* sql_stmt_read_line_matches_all_ = nullptr;
   sqlite3_stmt* sql_stmt_read_two_view_geometry_ = nullptr;
   sqlite3_stmt* sql_stmt_read_two_view_geometries_ = nullptr;
   sqlite3_stmt* sql_stmt_read_two_view_geometry_num_inliers_ = nullptr;
 
   // write_*
   sqlite3_stmt* sql_stmt_write_keypoints_ = nullptr;
+  sqlite3_stmt* sql_stmt_write_line_segments_ = nullptr;
   sqlite3_stmt* sql_stmt_write_descriptors_ = nullptr;
   sqlite3_stmt* sql_stmt_write_matches_ = nullptr;
+  sqlite3_stmt* sql_stmt_write_line_matches_ = nullptr;
   sqlite3_stmt* sql_stmt_write_two_view_geometry_ = nullptr;
 
   // delete_*
   sqlite3_stmt* sql_stmt_delete_matches_ = nullptr;
+  sqlite3_stmt* sql_stmt_delete_line_matches_ = nullptr;
   sqlite3_stmt* sql_stmt_delete_two_view_geometry_ = nullptr;
 
   // clear_*
   sqlite3_stmt* sql_stmt_clear_matches_ = nullptr;
+  sqlite3_stmt* sql_stmt_clear_line_matches_ = nullptr;
   sqlite3_stmt* sql_stmt_clear_two_view_geometries_ = nullptr;
 };
 

@@ -75,6 +75,7 @@ class DatabaseCache {
 
   // Get reference to correspondence graph.
   inline const class CorrespondenceGraph& CorrespondenceGraph() const;
+  inline const class CorrespondenceGraph& LineCorrespondenceGraph() const;
 
   // Manually add data to cache.
   void AddCamera(const class Camera& camera);
@@ -97,6 +98,7 @@ class DatabaseCache {
 
  private:
   class CorrespondenceGraph correspondence_graph_;
+  class CorrespondenceGraph line_correspondence_graph_;
 
   EIGEN_STL_UMAP(camera_t, class Camera) cameras_;
   EIGEN_STL_UMAP(image_t, class Image) images_;
@@ -144,6 +146,11 @@ bool DatabaseCache::ExistsImage(const image_t image_id) const {
 inline const class CorrespondenceGraph& DatabaseCache::CorrespondenceGraph()
     const {
   return correspondence_graph_;
+}
+
+inline const class CorrespondenceGraph& DatabaseCache::LineCorrespondenceGraph()
+    const {
+  return line_correspondence_graph_;
 }
 
 }  // namespace colmap

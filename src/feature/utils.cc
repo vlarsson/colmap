@@ -44,6 +44,18 @@ std::vector<Eigen::Vector2d> FeatureKeypointsToPointsVector(
   return points;
 }
 
+std::vector<std::pair<Eigen::Vector2d, Eigen::Vector2d>> FeatureLineSegmentsToPointPairVector(
+    const FeatureLineSegments& line_segments) {
+  std::vector<std::pair<Eigen::Vector2d, Eigen::Vector2d>> lines(line_segments.size());
+  for (size_t i = 0; i < line_segments.size(); ++i) {
+    lines[i] = std::make_pair(Eigen::Vector2d(line_segments[i].x1, line_segments[i].y1),
+        Eigen::Vector2d(line_segments[i].x2, line_segments[i].y2));
+  }
+  return lines;
+}
+
+
+
 Eigen::MatrixXf L2NormalizeFeatureDescriptors(
     const Eigen::MatrixXf& descriptors) {
   return descriptors.rowwise().normalized();
