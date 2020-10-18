@@ -635,8 +635,12 @@ void ImageTab::ShowImage() {
   const auto keypoints = database_->ReadKeypoints(image.ImageId());
   const std::vector<char> tri_mask(keypoints.size(), false);
 
+  const auto line_segments = database_->ReadLineSegments(image.ImageId());
+  const std::vector<char> tri_mask_lines(line_segments.size(), false);
+
   image_viewer_widget_->ReadAndShowWithKeypoints(
-      JoinPaths(*options_->image_path, image.Name()), keypoints, tri_mask);
+      JoinPaths(*options_->image_path, image.Name()), keypoints, tri_mask,
+      line_segments, tri_mask_lines);
   image_viewer_widget_->setWindowTitle(
       QString::fromStdString("Image " + std::to_string(image.ImageId())));
 }

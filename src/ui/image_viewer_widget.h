@@ -86,7 +86,10 @@ class FeatureImageViewerWidget : public ImageViewerWidget {
 
   void ReadAndShowWithKeypoints(const std::string& path,
                                 const FeatureKeypoints& keypoints,
-                                const std::vector<char>& tri_mask);
+                                const std::vector<char>& tri_mask,
+                                const FeatureLineSegments& line_segments,
+                                const std::vector<char>& tri_mask_lines);
+
 
   void ReadAndShowWithMatches(const std::string& path1,
                               const std::string& path2,

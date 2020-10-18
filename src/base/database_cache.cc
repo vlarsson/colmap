@@ -180,6 +180,7 @@ void DatabaseCache::Load(const Database& database, const size_t min_num_matches,
             FeatureLineSegmentsToPointPairVector(line_segs);
         images_[image.ImageId()].SetLines2D(lines);
 
+        std::cout << StringPrintf("Read %d 2D lines for image %d.", lines.size(), image.ImageId()) << std::endl;
       }
     }
 

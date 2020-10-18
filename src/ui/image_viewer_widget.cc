@@ -166,7 +166,8 @@ FeatureImageViewerWidget::FeatureImageViewerWidget(
 
 void FeatureImageViewerWidget::ReadAndShowWithKeypoints(
     const std::string& path, const FeatureKeypoints& keypoints,
-    const std::vector<char>& tri_mask) {
+    const std::vector<char>& tri_mask, const FeatureLineSegments& line_segments,
+    const std::vector<char>& tri_mask_lines) {
   Bitmap bitmap;
   if (!bitmap.Read(path, true)) {
     std::cerr << "ERROR: Cannot read image at path " << path << std::endl;
@@ -194,6 +195,26 @@ void FeatureImageViewerWidget::ReadAndShowWithKeypoints(
 
   DrawKeypoints(&image2_, keypoints_tri, Qt::magenta);
   DrawKeypoints(&image2_, keypoints_not_tri, Qt::red);
+
+  const size_t num_tri_lines = std::count_if(
+      tri_mask_lines.begin(), tri_mask_lines.end(), [](const bool tri) { return tri; });
+
+  FeatureLineSegments lines_tri(num_tri_lines);
+  FeatureLineSegments lines_not_tri(line_segments.size() - num_tri_lines);
+  i_tri = 0;
+  i_not_tri = 0;
+  for (size_t i = 0; i < tri_mask_lines.size(); ++i) {
+    if (tri_mask_lines[i]) {
+      lines_tri[i_tri] = line_segments[i];
+      i_tri += 1;
+    } else {
+      lines_not_tri[i_not_tri] = line_segments[i];
+      i_not_tri += 1;
+    }
+  }
+
+  DrawLineSegments(&image2_, lines_tri, Qt::magenta);
+  DrawLineSegments(&image2_, lines_not_tri, Qt::blue);
 
   if (switch_state_) {
     ShowPixmap(image2_);
@@ -377,8 +398,21 @@ void DatabaseImageViewerWidget::ShowImageWithId(const image_t image_id) {
     keypoints[i].y = static_cast<float>(image.Point2D(i).Y());
   }
 
+  std::vector<char> tri_mask_lines(image.NumLines2D());
+  for (size_t i = 0; i < image.NumLines2D(); ++i) {
+    tri_mask_lines[i] = image.Line2D(i).HasLine3D();
+  }
+
+  FeatureLineSegments line_segments(image.NumLines2D());
+  for (point2D_t i = 0; i < image.NumLines2D(); ++i) {
+    line_segments[i].x1 = static_cast<float>(image.Line2D(i).X1());
+    line_segments[i].y1 = static_cast<float>(image.Line2D(i).Y1());
+    line_segments[i].x2 = static_cast<float>(image.Line2D(i).X2());
+    line_segments[i].y2 = static_cast<float>(image.Line2D(i).Y2());
+  }
+
   const std::string path = JoinPaths(*options_->image_path, image.Name());
-  ReadAndShowWithKeypoints(path, keypoints, tri_mask);
+  ReadAndShowWithKeypoints(path, keypoints, tri_mask, line_segments, tri_mask_lines);
 }
 
 void DatabaseImageViewerWidget::ResizeTable() {

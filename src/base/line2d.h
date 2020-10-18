@@ -51,6 +51,10 @@ class Line2D {
   inline const std::pair<Eigen::Vector2d, Eigen::Vector2d> XY() const;
   inline const Eigen::Vector2d& XY1() const;
   inline const Eigen::Vector2d& XY2() const;
+  inline double X1() const;
+  inline double Y1() const;
+  inline double X2() const;
+  inline double Y2() const;
   
   inline void SetXY(const Eigen::Vector2d& xy1, const Eigen::Vector2d& xy2);
 
@@ -77,6 +81,11 @@ const std::pair<Eigen::Vector2d, Eigen::Vector2d> Line2D::XY() const { return st
 
 const Eigen::Vector2d& Line2D::XY1() const { return xy1_; }
 const Eigen::Vector2d& Line2D::XY2() const { return xy2_; }
+
+double Line2D::X1() const { return xy1_.x(); }
+double Line2D::Y1() const { return xy1_.y(); }
+double Line2D::X2() const { return xy2_.x(); }
+double Line2D::Y2() const { return xy2_.y(); }
 
 void Line2D::SetXY(const Eigen::Vector2d& xy1, const Eigen::Vector2d& xy2) { xy1_ = xy1; xy2_ = xy2; }
 

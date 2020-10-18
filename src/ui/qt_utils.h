@@ -52,6 +52,9 @@ QImage BitmapToQImageRGB(const Bitmap& bitmap);
 void DrawKeypoints(QPixmap* image, const FeatureKeypoints& points,
                    const QColor& color = Qt::red);
 
+void DrawLineSegments(QPixmap* pixmap, const FeatureLineSegments& lines,
+                   const QColor& color);
+
 QPixmap ShowImagesSideBySide(const QPixmap& image1, const QPixmap& image2);
 
 QPixmap DrawMatches(const QPixmap& image1, const QPixmap& image2,
