@@ -274,6 +274,7 @@ void ModelViewerWidget::ReloadReconstruction() {
 
   cameras = reconstruction->Cameras();
   points3D = reconstruction->Points3D();
+  lines3D = reconstruction->Lines3D();
   reg_image_ids = reconstruction->RegImageIds();
 
   images.clear();
@@ -292,6 +293,7 @@ void ModelViewerWidget::ClearReconstruction() {
   cameras.clear();
   images.clear();
   points3D.clear();
+  lines3D.clear();
   reg_image_ids.clear();
   reconstruction = nullptr;
   Upload();
@@ -823,6 +825,40 @@ void ModelViewerWidget::UploadPointConnectionData() {
   makeCurrent();
 
   std::vector<LinePainter::Data> line_data;
+  const size_t min_track_len =
+      static_cast<size_t>(options_->render->min_track_len);
+
+  for (const auto& line3D : lines3D) {
+    if (line3D.second.Error() <= options_->render->max_error &&
+        line3D.second.Track().Length() >= min_track_len) {
+      LinePainter::Data painter_line;
+
+
+      painter_line.point1.x = static_cast<float>(line3D.second.XYZ1(0));
+      painter_line.point1.y = static_cast<float>(line3D.second.XYZ1(1));
+      painter_line.point1.z = static_cast<float>(line3D.second.XYZ1(2));
+
+      painter_line.point2.x = static_cast<float>(line3D.second.XYZ2(0));
+      painter_line.point2.y = static_cast<float>(line3D.second.XYZ2(1));
+      painter_line.point2.z = static_cast<float>(line3D.second.XYZ2(2));
+
+      
+      Eigen::Vector4f color = kSelectedPointColor; // TODO      
+
+      painter_line.point1.r = color(0);
+      painter_line.point1.g = color(1);
+      painter_line.point1.b = color(2);
+      painter_line.point1.a = color(3);
+
+      painter_line.point2.r = color(0);
+      painter_line.point2.g = color(1);
+      painter_line.point2.b = color(2);
+      painter_line.point2.a = color(3);
+
+      line_data.push_back(painter_line);
+    }
+  }
+
 
   if (selected_point3D_id_ == kInvalidPoint3DId) {
     // No point selected, so upload empty data

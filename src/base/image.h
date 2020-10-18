@@ -91,6 +91,7 @@ class Image {
   // Get the number of triangulations, i.e. the number of points that
   // are part of a 3D point track.
   inline point2D_t NumPoints3D() const;
+  inline point2D_t NumLines3D() const;
 
   // Get the number of observations, i.e. the number of image points that
   // have at least one correspondence to another image.
@@ -105,6 +106,7 @@ class Image {
   // number of image points that have at least one correspondence to a
   // triangulated point in another image.
   inline point2D_t NumVisiblePoints3D() const;
+  inline point2D_t NumVisibleLines3D() const;
 
   // Get the score of triangulated observations. In contrast to
   // `NumVisiblePoints3D`, this score also captures the distribution
@@ -161,9 +163,12 @@ class Image {
   // Set the point as triangulated, i.e. it is part of a 3D point track.
   void SetPoint3DForPoint2D(const point2D_t point2D_idx,
                             const point3D_t point3D_id);
+  void SetLine3DForLine2D(const point2D_t line2D_idx,
+                            const point3D_t line3D_id);
 
   // Set the point as not triangulated, i.e. it is not part of a 3D point track.
   void ResetPoint3DForPoint2D(const point2D_t point2D_idx);
+  void ResetLine3DForLine2D(const point2D_t line2D_idx);
 
   // Check whether an image point has a correspondence to an image point in
   // another image that has a 3D point.
@@ -183,6 +188,11 @@ class Image {
   // and correspondence before. Note that this must only be called
   // after calling `SetUp`.
   void DecrementCorrespondenceHasPoint3D(const point2D_t point2D_idx);
+
+  // Same functions but for 3D lines
+  void IncrementCorrespondenceHasLine3D(const point2D_t line2D_idx);
+  void DecrementCorrespondenceHasLine3D(const point2D_t line2D_idx);
+
 
   // Normalize the quaternion vector.
   void NormalizeQvec();
@@ -222,6 +232,7 @@ class Image {
   // The number of 3D points the image observes, i.e. the sum of its `points2D`
   // where `point3D_id != kInvalidPoint3DId`.
   point2D_t num_points3D_;
+  point2D_t num_lines3D_;
 
   // The number of image points that have at least one correspondence to
   // another image.
@@ -234,6 +245,7 @@ class Image {
   // another image that is part of a 3D point track, i.e. the sum of `points2D`
   // where `num_tris > 0`.
   point2D_t num_visible_points3D_;
+  point2D_t num_visible_lines3D_;
 
   // The pose of the image, defined as the transformation from world to image.
   Eigen::Vector4d qvec_;
@@ -251,6 +263,7 @@ class Image {
 
   // Per image point, the number of correspondences that have a 3D point.
   std::vector<image_t> num_correspondences_have_point3D_;
+  std::vector<image_t> num_correspondences_have_line3D_;
 
   // Data structure to compute the distribution of triangulated correspondences
   // in the image. Note that this structure is only usable after `SetUp`.
@@ -293,6 +306,7 @@ point2D_t Image::NumLines2D() const {
 }
 
 point2D_t Image::NumPoints3D() const { return num_points3D_; }
+point2D_t Image::NumLines3D() const { return num_lines3D_; }
 
 point2D_t Image::NumObservations() const { return num_observations_; }
 
@@ -307,6 +321,7 @@ void Image::SetNumCorrespondences(const point2D_t num_correspondences) {
 }
 
 point2D_t Image::NumVisiblePoints3D() const { return num_visible_points3D_; }
+point2D_t Image::NumVisibleLines3D() const { return num_visible_lines3D_; }
 
 size_t Image::Point3DVisibilityScore() const {
   return point3D_visibility_pyramid_.Score();

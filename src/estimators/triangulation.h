@@ -146,11 +146,104 @@ bool EstimateTriangulation(
     const std::vector<TriangulationEstimator::PoseData>& pose_data,
     std::vector<char>* inlier_mask, Eigen::Vector3d* xyz);
 
+
+// Triangulation estimator to estimate 3D lines from multiple observations.
+// The triangulation must satisfy the following constraints:
+//    - Sufficient triangulation angle between observation pairs.
+//    - All observations must satisfy cheirality constraint.
+//
+// An observation is composed of an image measurement and the corresponding
+// camera pose and calibration.
+class LineTriangulationEstimator {
+ public: 
+
+  struct LineData {
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    LineData() {}
+    LineData(const Eigen::Vector2d& point1_, const Eigen::Vector2d& point2_,
+             const Eigen::Vector2d& point1_N_, const Eigen::Vector2d& point2_N_)
+        : point1(point1_), point2(point2_),
+         point1_normalized(point1_N_), point2_normalized(point2_N_) {}
+    // Image observation in pixels. Only needs to be set for REPROJECTION_ERROR.
+    Eigen::Vector2d point1, point2;
+    // Normalized image observation. Must always be set.
+    Eigen::Vector2d point1_normalized, point2_normalized;
+  };
+
+  struct PoseData {
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    PoseData() : camera(nullptr) {}
+    PoseData(const Eigen::Matrix3x4d& proj_matrix_,
+             const Eigen::Vector3d& pose_, const Camera* camera_)
+        : proj_matrix(proj_matrix_), proj_center(pose_), camera(camera_) {}
+    // The projection matrix for the image of the observation.
+    Eigen::Matrix3x4d proj_matrix;
+    // The projection center for the image of the observation.
+    Eigen::Vector3d proj_center;
+    // The camera for the image of the observation.
+    const Camera* camera;
+  };
+
+  typedef LineData X_t;
+  typedef PoseData Y_t;
+  typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> M_t;
+
+  // Specify settings for triangulation estimator.
+  void SetMinTriAngle(const double min_tri_angle);
+  void SetResidualType(const TriangulationEstimator::ResidualType residual_type);
+
+
+  // The minimum number of samples needed to estimate a model.
+  static const int kMinNumSamples = 2;
+
+  // Estimate a 3D point from a two-view observation.
+  //
+  // @param point_data        Image measurement.
+  // @param point_data        Camera poses.
+  //
+  // @return                  Triangulated point if successful, otherwise none.
+  std::vector<M_t> Estimate(const std::vector<X_t>& line_data,
+                            const std::vector<Y_t>& pose_data) const;
+
+  // Calculate residuals in terms of squared reprojection or angular error.
+  //
+  // @param point_data        Image measurements.
+  // @param point_data        Camera poses.
+  // @param xyz               3D point.
+  //
+  // @return                  Residual for each observation.
+  void Residuals(const std::vector<X_t>& point_data,
+                 const std::vector<Y_t>& pose_data, const M_t& xyz,
+                 std::vector<double>* residuals) const;
+
+ private:
+  double min_tri_angle_ = 0.0;
+  TriangulationEstimator::ResidualType residual_type_ = TriangulationEstimator::ResidualType::REPROJECTION_ERROR;
+
+};
+
+
+
+// Robustly estimate 3D point from observations in multiple views using RANSAC
+// and a subsequent non-linear refinement using all inliers. Returns true
+// if the estimated number of inliers has more than two views.
+bool EstimateLineTriangulation(
+    const EstimateTriangulationOptions& options,
+    const std::vector<LineTriangulationEstimator::LineData>& line_data,
+    const std::vector<LineTriangulationEstimator::PoseData>& pose_data,
+    std::vector<char>* inlier_mask, std::pair<Eigen::Vector3d, Eigen::Vector3d>* xyz);
+
 }  // namespace colmap
 
 EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION_CUSTOM(
     colmap::TriangulationEstimator::PointData)
 EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION_CUSTOM(
     colmap::TriangulationEstimator::PoseData)
+
+EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION_CUSTOM(
+    colmap::LineTriangulationEstimator::LineData)
+EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION_CUSTOM(
+    colmap::LineTriangulationEstimator::PoseData)
+
 
 #endif  // COLMAP_SRC_ESTIMATORS_TRIANGULATION_H_

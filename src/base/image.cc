@@ -49,9 +49,11 @@ Image::Image()
       camera_id_(kInvalidCameraId),
       registered_(false),
       num_points3D_(0),
+      num_lines3D_(0),
       num_observations_(0),
       num_correspondences_(0),
       num_visible_points3D_(0),
+      num_visible_lines3D_(0),
       qvec_(1.0, 0.0, 0.0, 0.0),
       tvec_(0.0, 0.0, 0.0),
       qvec_prior_(kNaN, kNaN, kNaN, kNaN),
@@ -85,6 +87,7 @@ void Image::SetPoints2D(const std::vector<class Point2D>& points) {
 void Image::SetLines2D(const std::vector<std::pair<Eigen::Vector2d, Eigen::Vector2d>>& lines) {
   CHECK(lines2D_.empty());
   lines2D_.resize(lines.size());
+  num_correspondences_have_line3D_.resize(lines.size(), 0);
   for (point2D_t line2D_idx = 0; line2D_idx < lines.size(); ++line2D_idx) {
     lines2D_[line2D_idx].SetXY(lines[line2D_idx].first, lines[line2D_idx].second);
   }
@@ -92,6 +95,7 @@ void Image::SetLines2D(const std::vector<std::pair<Eigen::Vector2d, Eigen::Vecto
 
 void Image::SetLines2D(const std::vector<class Line2D>& lines) {
   CHECK(lines2D_.empty());
+  num_correspondences_have_line3D_.resize(lines.size(), 0);
   lines2D_ = lines;
 }
 
@@ -105,11 +109,31 @@ void Image::SetPoint3DForPoint2D(const point2D_t point2D_idx,
   point2D.SetPoint3DId(point3D_id);
 }
 
+void Image::SetLine3DForLine2D(const point2D_t line2D_idx,
+                                 const point3D_t line3D_id) {
+  CHECK_NE(line3D_id, kInvalidPoint3DId);
+  class Line2D& line2D = lines2D_.at(line2D_idx);
+  if (!line2D.HasLine3D()) {
+    num_lines3D_ += 1;
+  }
+  line2D.SetLine3DId(line3D_id);
+}
+
+
+
 void Image::ResetPoint3DForPoint2D(const point2D_t point2D_idx) {
   class Point2D& point2D = points2D_.at(point2D_idx);
   if (point2D.HasPoint3D()) {
     point2D.SetPoint3DId(kInvalidPoint3DId);
     num_points3D_ -= 1;
+  }
+}
+
+void Image::ResetLine3DForLine2D(const point2D_t line2D_idx) {
+  class Line2D& line2D = lines2D_.at(line2D_idx);
+  if (line2D.HasLine3D()) {
+    line2D.SetLine3DId(kInvalidPoint3DId);
+    num_lines3D_ -= 1;
   }
 }
 
@@ -144,6 +168,22 @@ void Image::DecrementCorrespondenceHasPoint3D(const point2D_t point2D_idx) {
   point3D_visibility_pyramid_.ResetPoint(point2D.X(), point2D.Y());
 
   assert(num_visible_points3D_ <= num_observations_);
+}
+
+void Image::IncrementCorrespondenceHasLine3D(const point2D_t line2D_idx) {
+  num_correspondences_have_line3D_[line2D_idx] += 1;
+  if (num_correspondences_have_line3D_[line2D_idx] == 1) {
+    num_visible_lines3D_ += 1;
+  }
+  //assert(num_visible_points3D_ <= num_observations_);
+}
+
+void Image::DecrementCorrespondenceHasLine3D(const point2D_t line2D_idx) {
+  num_correspondences_have_line3D_[line2D_idx] -= 1;
+  if (num_correspondences_have_line3D_[line2D_idx] == 0) {
+    num_visible_lines3D_ -= 1;
+  }
+  //assert(num_visible_points3D_ <= num_observations_);
 }
 
 void Image::NormalizeQvec() { qvec_ = NormalizeQuaternion(qvec_); }

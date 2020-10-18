@@ -47,7 +47,8 @@
 namespace colmap {
 
 Reconstruction::Reconstruction()
-    : correspondence_graph_(nullptr), num_added_points3D_(0) {}
+    : correspondence_graph_(nullptr), line_correspondence_graph_(nullptr),
+      num_added_points3D_(0), num_added_lines3D_(0) {}
 
 std::unordered_set<point3D_t> Reconstruction::Point3DIds() const {
   std::unordered_set<point3D_t> point3D_ids;
@@ -60,8 +61,20 @@ std::unordered_set<point3D_t> Reconstruction::Point3DIds() const {
   return point3D_ids;
 }
 
+std::unordered_set<point3D_t> Reconstruction::Line3DIds() const {
+  std::unordered_set<point3D_t> line3D_ids;
+  line3D_ids.reserve(lines3D_.size());
+
+  for (const auto& line3D : lines3D_) {
+    line3D_ids.insert(line3D.first);
+  }
+
+  return line3D_ids;
+}
+
 void Reconstruction::Load(const DatabaseCache& database_cache) {
   correspondence_graph_ = nullptr;
+  line_correspondence_graph_ = nullptr;
 
   // Add cameras.
   cameras_.reserve(database_cache.NumCameras());
@@ -84,6 +97,13 @@ void Reconstruction::Load(const DatabaseCache& database_cache) {
       } else {
         CHECK_EQ(image.second.NumPoints2D(), existing_image.NumPoints2D());
       }
+
+      if (existing_image.NumLines2D() == 0) {
+        existing_image.SetLines2D(image.second.Lines2D());
+      } else {
+        CHECK_EQ(image.second.NumLines2D(), existing_image.NumLines2D());
+      }
+
       existing_image.SetNumObservations(image.second.NumObservations());
       existing_image.SetNumCorrespondences(image.second.NumCorrespondences());
     } else {
@@ -101,11 +121,17 @@ void Reconstruction::Load(const DatabaseCache& database_cache) {
 }
 
 void Reconstruction::SetUp(const CorrespondenceGraph* correspondence_graph) {
+  SetUp(correspondence_graph, nullptr);
+}
+
+void Reconstruction::SetUp(const CorrespondenceGraph* correspondence_graph,
+                           const CorrespondenceGraph* line_correspondence_graph) {
   CHECK_NOTNULL(correspondence_graph);
   for (auto& image : images_) {
     image.second.SetUp(Camera(image.second.CameraId()));
   }
   correspondence_graph_ = correspondence_graph;
+  line_correspondence_graph_ = line_correspondence_graph;
 
   // If an existing model was loaded from disk and there were already images
   // registered previously, we need to set observations as triangulated.
@@ -119,11 +145,21 @@ void Reconstruction::SetUp(const CorrespondenceGraph* correspondence_graph) {
                                      kIsContinuedPoint3D);
       }
     }
+
+    for (point2D_t line2D_idx = 0; line2D_idx < image.NumLines2D();
+         ++line2D_idx) {
+      if (image.Line2D(line2D_idx).HasLine3D()) {
+        const bool kIsContinuedPoint3D = false;
+        SetLineObservationAsTriangulated(image_id, line2D_idx,
+                                     kIsContinuedPoint3D);
+      }
+    }
   }
 }
 
 void Reconstruction::TearDown() {
   correspondence_graph_ = nullptr;
+  line_correspondence_graph_ = nullptr;
 
   // Remove all not yet registered images.
   std::unordered_set<camera_t> keep_camera_ids;
@@ -149,6 +185,9 @@ void Reconstruction::TearDown() {
   // Compress tracks.
   for (auto& point3D : points3D_) {
     point3D.second.Track().Compress();
+  }  
+  for (auto& line3D : lines3D_) {
+    line3D.second.Track().Compress();
   }
 }
 
@@ -192,6 +231,38 @@ point3D_t Reconstruction::AddPoint3D(const Eigen::Vector3d& xyz,
   return point3D_id;
 }
 
+
+point3D_t Reconstruction::AddLine3D(
+        const Eigen::Vector3d& xyz1, const Eigen::Vector3d& xyz2,
+        const Track& track, const Eigen::Vector3ub& color) {
+  const point3D_t line3D_id = ++num_added_lines3D_;
+  
+  CHECK(!ExistsLine3D(line3D_id));
+
+  class Line3D& line3D = lines3D_[line3D_id];
+
+  line3D.SetXYZ(xyz1, xyz2);
+  line3D.SetTrack(track);
+  line3D.SetColor(color);
+
+  for (const auto& track_el : track.Elements()) {
+    class Image& image = Image(track_el.image_id);
+    CHECK(!image.Line2D(track_el.point2D_idx).HasLine3D());
+    image.SetLine3DForLine2D(track_el.point2D_idx, line3D_id);
+    CHECK_LE(image.NumLines3D(), image.NumLines2D());
+  }
+
+  const bool kIsContinuedPoint3D = false;
+
+  for (const auto& track_el : track.Elements()) {
+    // TODO this one!
+    SetLineObservationAsTriangulated(track_el.image_id, track_el.point2D_idx,
+                                 kIsContinuedPoint3D);
+  }
+
+  return line3D_id;
+}
+
 void Reconstruction::AddObservation(const point3D_t point3D_id,
                                     const TrackElement& track_el) {
   class Image& image = Image(track_el.image_id);
@@ -205,6 +276,21 @@ void Reconstruction::AddObservation(const point3D_t point3D_id,
 
   const bool kIsContinuedPoint3D = true;
   SetObservationAsTriangulated(track_el.image_id, track_el.point2D_idx,
+                               kIsContinuedPoint3D);
+}
+void Reconstruction::AddLineObservation(const point3D_t line3D_id,
+                                    const TrackElement& track_el) {
+  class Image& image = Image(track_el.image_id);
+  CHECK(!image.Line2D(track_el.point2D_idx).HasLine3D());
+
+  image.SetLine3DForLine2D(track_el.point2D_idx, line3D_id);
+  CHECK_LE(image.NumLines3D(), image.NumLines2D());
+
+  class Line3D& line3D = Line3D(line3D_id);
+  line3D.Track().AddElement(track_el);
+
+  const bool kIsContinuedPoint3D = true;
+  SetLineObservationAsTriangulated(track_el.image_id, track_el.point2D_idx,
                                kIsContinuedPoint3D);
 }
 
@@ -257,6 +343,27 @@ void Reconstruction::DeletePoint3D(const point3D_t point3D_id) {
   points3D_.erase(point3D_id);
 }
 
+void Reconstruction::DeleteLine3D(const point3D_t line3D_id) {
+  // Note: Do not change order of these instructions, especially with respect to
+  // `Reconstruction::ResetTriObservations`
+
+  const class Track& track = Line3D(line3D_id).Track();
+
+  const bool kIsDeletedPoint3D = true;
+
+  for (const auto& track_el : track.Elements()) {
+    ResetTriLineObservations(track_el.image_id, track_el.point2D_idx,
+                         kIsDeletedPoint3D);
+  }
+
+  for (const auto& track_el : track.Elements()) {
+    class Image& image = Image(track_el.image_id);
+    image.ResetLine3DForLine2D(track_el.point2D_idx);
+  }
+
+  lines3D_.erase(line3D_id);
+}
+
 void Reconstruction::DeleteObservation(const image_t image_id,
                                        const point2D_t point2D_idx) {
   // Note: Do not change order of these instructions, especially with respect to
@@ -277,6 +384,28 @@ void Reconstruction::DeleteObservation(const image_t image_id,
   ResetTriObservations(image_id, point2D_idx, kIsDeletedPoint3D);
 
   image.ResetPoint3DForPoint2D(point2D_idx);
+}
+
+void Reconstruction::DeleteLineObservation(const image_t image_id,
+                                       const point2D_t line2D_idx) {
+  // Note: Do not change order of these instructions, especially with respect to
+  // `Reconstruction::ResetTriObservations`
+
+  class Image& image = Image(image_id);
+  const point3D_t line3D_id = image.Line2D(line2D_idx).Line3DId();
+  class Line3D& line3D = Line3D(line3D_id);
+
+  if (line3D.Track().Length() <= 2) {
+    DeleteLine3D(line3D_id);
+    return;
+  }
+
+  line3D.Track().DeleteElement(image_id, line2D_idx);
+
+  const bool kIsDeletedPoint3D = false;
+  ResetTriLineObservations(image_id, line2D_idx, kIsDeletedPoint3D);
+
+  image.ResetLine3DForLine2D(line2D_idx);
 }
 
 void Reconstruction::DeleteAllPoints2DAndPoints3D() {
@@ -1978,6 +2107,44 @@ void Reconstruction::SetObservationAsTriangulated(
   }
 }
 
+void Reconstruction::SetLineObservationAsTriangulated(
+    const image_t image_id, const point2D_t line2D_idx,
+    const bool is_continued_point3D) {
+  if (line_correspondence_graph_ == nullptr) {
+    return;
+  }
+
+  const class Image& image = Image(image_id);
+  const Line2D& line2D = image.Line2D(line2D_idx);
+  const std::vector<CorrespondenceGraph::Correspondence>& corrs =
+      line_correspondence_graph_->FindCorrespondences(image_id, line2D_idx);
+
+  CHECK(image.IsRegistered());
+  CHECK(line2D.HasLine3D());
+
+  for (const auto& corr : corrs) {
+    class Image& corr_image = Image(corr.image_id);
+    corr_image.IncrementCorrespondenceHasLine3D(corr.point2D_idx);
+
+    // TODO: Do we really need this for lines as well?
+    //       Figure out what this is actually used for...
+    /*
+    // Update number of shared 3D points between image pairs and make sure to
+    // only count the correspondences once (not twice forward and backward).
+    if (point2D.Point3DId() == corr_point2D.Point3DId() &&
+        (is_continued_point3D || image_id < corr.image_id)) {
+      const image_pair_t pair_id =
+          Database::ImagePairToPairId(image_id, corr.image_id);
+      image_pair_stats_[pair_id].num_tri_corrs += 1;
+      CHECK_LE(image_pair_stats_[pair_id].num_tri_corrs,
+               image_pair_stats_[pair_id].num_total_corrs)
+          << "The correspondence graph graph must not contain duplicate "
+             "matches";
+    }
+    */
+  }
+}
+
 void Reconstruction::ResetTriObservations(const image_t image_id,
                                           const point2D_t point2D_idx,
                                           const bool is_deleted_point3D) {
@@ -2007,6 +2174,42 @@ void Reconstruction::ResetTriObservations(const image_t image_id,
       CHECK_GE(image_pair_stats_[pair_id].num_tri_corrs, 0)
           << "The scene graph graph must not contain duplicate matches";
     }
+  }
+}
+
+
+
+void Reconstruction::ResetTriLineObservations(const image_t image_id,
+                                          const point2D_t line2D_idx,
+                                          const bool is_deleted_line3D) {
+  if (line_correspondence_graph_ == nullptr) {
+    return;
+  }
+
+  const class Image& image = Image(image_id);
+  const Line2D& line2D = image.Line2D(line2D_idx);
+  const std::vector<CorrespondenceGraph::Correspondence>& corrs =
+      line_correspondence_graph_->FindCorrespondences(image_id, line2D_idx);
+
+  CHECK(image.IsRegistered());
+  CHECK(line2D.HasLine3D());
+
+  for (const auto& corr : corrs) {
+    class Image& corr_image = Image(corr.image_id);
+    corr_image.DecrementCorrespondenceHasLine3D(corr.point2D_idx);
+    
+    /*
+    // Update number of shared 3D points between image pairs and make sure to
+    // only count the correspondences once (not twice forward and backward).
+    if (point2D.Point3DId() == corr_point2D.Point3DId() &&
+        (!is_deleted_point3D || image_id < corr.image_id)) {
+      const image_pair_t pair_id =
+          Database::ImagePairToPairId(image_id, corr.image_id);
+      image_pair_stats_[pair_id].num_tri_corrs -= 1;
+      CHECK_GE(image_pair_stats_[pair_id].num_tri_corrs, 0)
+          << "The scene graph graph must not contain duplicate matches";
+    }
+    */
   }
 }
 

@@ -126,6 +126,7 @@ class ModelViewerWidget : public QOpenGLWidget,
   EIGEN_STL_UMAP(camera_t, Camera) cameras;
   EIGEN_STL_UMAP(image_t, Image) images;
   EIGEN_STL_UMAP(point3D_t, Point3D) points3D;
+  EIGEN_STL_UMAP(point3D_t, Line3D) lines3D;
   std::vector<image_t> reg_image_ids;
 
   QLabel* statusbar_status_label;

@@ -37,6 +37,7 @@
 #include "base/reconstruction.h"
 #include "optim/bundle_adjustment.h"
 #include "sfm/incremental_triangulator.h"
+#include "sfm/incremental_line_triangulator.h"
 #include "util/alignment.h"
 
 namespace colmap {
@@ -176,6 +177,7 @@ class IncrementalMapper {
 
   // Triangulate observations of image.
   size_t TriangulateImage(const IncrementalTriangulator::Options& tri_options,
+                          const IncrementalLineTriangulator::Options& line_tri_options,
                           const image_t image_id);
 
   // Retriangulate image pairs that should have common observations according to
@@ -183,18 +185,21 @@ class IncrementalMapper {
   // reprojection error thresholds should be relatively large. If the thresholds
   // are too large, non-robust bundle adjustment will break down; if the
   // thresholds are too small, we cannot fix drift effectively.
-  size_t Retriangulate(const IncrementalTriangulator::Options& tri_options);
+  size_t Retriangulate(const IncrementalTriangulator::Options& tri_options,
+                       const IncrementalLineTriangulator::Options& line_tri_options);
 
   // Complete tracks by transitively following the scene graph correspondences.
   // This is especially effective after bundle adjustment, since many cameras
   // and point locations might have improved. Completion of tracks enables
   // better subsequent registration of new images.
-  size_t CompleteTracks(const IncrementalTriangulator::Options& tri_options);
+  size_t CompleteTracks(const IncrementalTriangulator::Options& tri_options,
+                        const IncrementalLineTriangulator::Options& line_tri_options);
 
   // Merge tracks by using scene graph correspondences. Similar to
   // `CompleteTracks`, this is effective after bundle adjustment and improves
   // the redundancy in subsequent bundle adjustments.
-  size_t MergeTracks(const IncrementalTriangulator::Options& tri_options);
+  size_t MergeTracks(const IncrementalTriangulator::Options& tri_options,
+                     const IncrementalLineTriangulator::Options& line_tri_options);
 
   // Adjust locally connected images and points of a reference image. In
   // addition, refine the provided 3D points. Only images connected to the
@@ -204,6 +209,7 @@ class IncrementalMapper {
   LocalBundleAdjustmentReport AdjustLocalBundle(
       const Options& options, const BundleAdjustmentOptions& ba_options,
       const IncrementalTriangulator::Options& tri_options,
+      const IncrementalLineTriangulator::Options& line_tri_options,
       const image_t image_id, const std::unordered_set<point3D_t>& point3D_ids);
 
   // Global bundle adjustment using Ceres Solver or PBA.
@@ -268,6 +274,7 @@ class IncrementalMapper {
 
   // Class that is responsible for incremental triangulation.
   std::unique_ptr<IncrementalTriangulator> triangulator_;
+  std::unique_ptr<IncrementalLineTriangulator> line_triangulator_;
 
   // Number of images that are registered in at least on reconstruction.
   size_t num_total_reg_images_;

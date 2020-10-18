@@ -114,6 +114,22 @@ double CalculateSquaredReprojectionError(const Eigen::Vector2d& point2D,
                                          const Eigen::Matrix3x4d& proj_matrix,
                                          const Camera& camera);
 
+// Calculate the reprojection error for lines
+//
+// The reprojection error is the Euclidean distance between the end points
+// observed in the image and the projection of the 3D line. If the
+// 3D point is behind the camera, then this function returns DBL_MAX.                               
+// Lines are parameterized by two points. 
+double CalculateSquaredLineReprojectionError(
+    const Eigen::Vector2d& point2D_1, const Eigen::Vector2d& point2D_2,
+    const Eigen::Vector3d& point3D_1, const Eigen::Vector3d& point3D_2,
+    const Eigen::Vector4d& qvec, const Eigen::Vector3d& tvec, const Camera& camera);
+double CalculateSquaredLineReprojectionError(
+    const Eigen::Vector2d& point2D_1, const Eigen::Vector2d& point2D_2,
+    const Eigen::Vector3d& point3D_1, const Eigen::Vector3d& point3D_2,
+    const Eigen::Matrix3x4d& proj_matrix, const Camera& camera);
+
+
 // Calculate the angular error.
 //
 // The angular error is the angle between the observed viewing ray and the
@@ -127,6 +143,16 @@ double CalculateAngularError(const Eigen::Vector2d& point2D,
                              const Eigen::Matrix3x4d& proj_matrix,
                              const Camera& camera);
 
+// Same for lines
+double CalculateLineAngularError(
+    const Eigen::Vector2d& point2D_1, const Eigen::Vector2d& point2D_2,
+    const Eigen::Vector3d& point3D_1, const Eigen::Vector3d& point3D_2,
+    const Eigen::Vector4d& qvec, const Eigen::Vector3d& tvec, const Camera& camera);
+double CalculateLineAngularError(
+    const Eigen::Vector2d& point2D_1, const Eigen::Vector2d& point2D_2,
+    const Eigen::Vector3d& point3D_1, const Eigen::Vector3d& point3D_2,
+    const Eigen::Matrix3x4d& proj_matrix, const Camera& camera);
+
 // Calculate angulate error using normalized image points.
 //
 // The angular error is the angle between the observed viewing ray and the
@@ -138,6 +164,16 @@ double CalculateNormalizedAngularError(const Eigen::Vector2d& point2D,
 double CalculateNormalizedAngularError(const Eigen::Vector2d& point2D,
                                        const Eigen::Vector3d& point3D,
                                        const Eigen::Matrix3x4d& proj_matrix);
+
+// Same for lines
+double CalculateNormalizedLineAngularError(
+    const Eigen::Vector2d& point2D_1, const Eigen::Vector2d& point2D_2,
+    const Eigen::Vector3d& point3D_1, const Eigen::Vector3d& point3D_2,
+    const Eigen::Vector4d& qvec, const Eigen::Vector3d& tvec);
+double CalculateNormalizedLineAngularError(
+    const Eigen::Vector2d& point2D_1, const Eigen::Vector2d& point2D_2,
+    const Eigen::Vector3d& point3D_1, const Eigen::Vector3d& point3D_2,
+    const Eigen::Matrix3x4d& proj_matrix);
 
 // Calculate depth of 3D point with respect to camera.
 //

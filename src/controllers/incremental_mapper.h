@@ -132,6 +132,7 @@ struct IncrementalMapperOptions {
 
   IncrementalMapper::Options Mapper() const;
   IncrementalTriangulator::Options Triangulation() const;
+  IncrementalLineTriangulator::Options LineTriangulation() const;
   BundleAdjustmentOptions LocalBundleAdjustment() const;
   BundleAdjustmentOptions GlobalBundleAdjustment() const;
   ParallelBundleAdjuster::Options ParallelGlobalBundleAdjustment() const;
@@ -149,6 +150,7 @@ struct IncrementalMapperOptions {
   friend class ReconstructionOptionsWidget;
   IncrementalMapper::Options mapper;
   IncrementalTriangulator::Options triangulation;
+  IncrementalLineTriangulator::Options line_triangulation;
 };
 
 // Class that controls the incremental mapping procedure by iteratively

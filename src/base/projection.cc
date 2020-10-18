@@ -148,6 +148,50 @@ double CalculateSquaredReprojectionError(const Eigen::Vector2d& point2D,
   return (proj_point2D - point2D).squaredNorm();
 }
 
+
+double CalculateSquaredLineReprojectionError(
+    const Eigen::Vector2d& point2D_1, const Eigen::Vector2d& point2D_2,
+    const Eigen::Vector3d& point3D_1, const Eigen::Vector3d& point3D_2,
+    const Eigen::Matrix3x4d& proj_matrix, const Camera& camera) {
+
+  const Eigen::Vector3d X1 = proj_matrix * point3D_1.homogeneous();
+  const Eigen::Vector3d X2 = proj_matrix * point3D_2.homogeneous();
+
+  // Check that point is infront of camera.
+  // TODO: check this not for the 3D points defining the lines, 
+  //       but the points closest to where the segment starts/ends
+  if (X1.z() < std::numeric_limits<double>::epsilon()) {
+    return std::numeric_limits<double>::max();
+  }
+  if (X2.z() < std::numeric_limits<double>::epsilon()) {
+    return std::numeric_limits<double>::max();
+  }
+
+  const Eigen::Vector2d x1 = camera.WorldToImage(X1.hnormalized());
+  const Eigen::Vector2d x2 = camera.WorldToImage(X2.hnormalized());
+
+  const Eigen::Vector3d line = x1.homogeneous().cross(x2.homogeneous());
+
+  const double res1 = line.dot(point2D_1.homogeneous());
+  const double res2 = line.dot(point2D_2.homogeneous());
+
+  return 0.5 * (res1 * res1 + res2 * res2) / line.topRows<2>().squaredNorm();
+}
+
+
+double CalculateSquaredLineReprojectionError(
+    const Eigen::Vector2d& point2D_1, const Eigen::Vector2d& point2D_2,
+    const Eigen::Vector3d& point3D_1, const Eigen::Vector3d& point3D_2,
+    const Eigen::Vector4d& qvec, const Eigen::Vector3d& tvec, const Camera& camera) {
+
+  Eigen::Matrix3x4d proj_matrix;
+  proj_matrix << QuaternionToRotationMatrix(qvec), tvec;
+
+  return CalculateSquaredLineReprojectionError(point2D_1, point2D_2,
+          point3D_1, point3D_2, proj_matrix, camera);  
+}
+
+
 double CalculateAngularError(const Eigen::Vector2d& point2D,
                              const Eigen::Vector3d& point3D,
                              const Eigen::Vector4d& qvec,
@@ -165,6 +209,25 @@ double CalculateAngularError(const Eigen::Vector2d& point2D,
                                          proj_matrix);
 }
 
+double CalculateLineAngularError(
+    const Eigen::Vector2d& point2D_1, const Eigen::Vector2d& point2D_2,
+    const Eigen::Vector3d& point3D_1, const Eigen::Vector3d& point3D_2,
+    const Eigen::Vector4d& qvec, const Eigen::Vector3d& tvec, const Camera& camera) {
+  return CalculateNormalizedLineAngularError(
+    camera.ImageToWorld(point2D_1), camera.ImageToWorld(point2D_2),
+    point3D_1, point3D_2, qvec, tvec);
+}
+
+double CalculateLineAngularError(
+      const Eigen::Vector2d& point2D_1, const Eigen::Vector2d& point2D_2,
+      const Eigen::Vector3d& point3D_1, const Eigen::Vector3d& point3D_2,
+      const Eigen::Matrix3x4d& proj_matrix, const Camera& camera) {
+  return CalculateNormalizedLineAngularError(
+    camera.ImageToWorld(point2D_1), camera.ImageToWorld(point2D_2),
+    point3D_1, point3D_2, proj_matrix);
+}
+
+
 double CalculateNormalizedAngularError(const Eigen::Vector2d& point2D,
                                        const Eigen::Vector3d& point3D,
                                        const Eigen::Vector4d& qvec,
@@ -180,6 +243,37 @@ double CalculateNormalizedAngularError(const Eigen::Vector2d& point2D,
   const Eigen::Vector3d ray1 = point2D.homogeneous();
   const Eigen::Vector3d ray2 = proj_matrix * point3D.homogeneous();
   return std::acos(ray1.normalized().transpose() * ray2.normalized());
+}
+
+double CalculateNormalizedLineAngularError(
+      const Eigen::Vector2d& point2D_1, const Eigen::Vector2d& point2D_2,
+      const Eigen::Vector3d& point3D_1, const Eigen::Vector3d& point3D_2,
+      const Eigen::Vector4d& qvec, const Eigen::Vector3d& tvec) {
+  Eigen::Matrix3x4d proj_matrix;
+  proj_matrix << QuaternionToRotationMatrix(qvec), tvec;
+  return CalculateNormalizedLineAngularError(point2D_1, point2D_2,
+        point3D_1, point3D_2, proj_matrix);
+}
+
+double CalculateNormalizedLineAngularError(
+      const Eigen::Vector2d& point2D_1, const Eigen::Vector2d& point2D_2,
+      const Eigen::Vector3d& point3D_1, const Eigen::Vector3d& point3D_2,
+      const Eigen::Matrix3x4d& proj_matrix) {
+
+  const Eigen::Vector3d X1 = proj_matrix * point3D_1.homogeneous();
+  const Eigen::Vector3d X2 = proj_matrix * point3D_2.homogeneous();
+
+  const Eigen::Vector2d x1 = X1.hnormalized();
+  const Eigen::Vector2d x2 = X2.hnormalized();
+
+  // line from projections
+  const Eigen::Vector3d line_proj = x1.homogeneous().cross(x2.homogeneous());
+  // observed line segment
+  const Eigen::Vector3d line_obs = point2D_1.homogeneous().cross(
+        point2D_2.homogeneous());
+
+  // compute angle between normals  
+  return std::acos(std::abs(line_proj.normalized().transpose() * line_obs.normalized()));
 }
 
 double CalculateDepth(const Eigen::Matrix3x4d& proj_matrix,

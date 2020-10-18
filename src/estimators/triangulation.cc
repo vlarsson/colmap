@@ -159,4 +159,133 @@ bool EstimateTriangulation(
   return report.success;
 }
 
+/////////////////////////////////////////////////////////////
+// Line triangulation below
+
+void LineTriangulationEstimator::SetMinTriAngle(const double min_tri_angle) {
+  CHECK_GE(min_tri_angle, 0);
+  min_tri_angle_ = min_tri_angle;
+}
+
+
+void LineTriangulationEstimator::SetResidualType(const TriangulationEstimator::ResidualType residual_type) {
+  residual_type_ = residual_type;
+}
+
+
+std::vector<LineTriangulationEstimator::M_t> LineTriangulationEstimator::Estimate(
+    const std::vector<X_t>& line_data,
+    const std::vector<Y_t>& pose_data) const {
+  CHECK_GE(line_data.size(), 2);
+  CHECK_EQ(line_data.size(), pose_data.size());
+  
+  Eigen::Matrix4d A;
+  A.setZero();
+
+  for(int i = 0; i < line_data.size(); ++i) {
+
+    Eigen::Vector3d line2d = line_data[i].point1_normalized.homogeneous().cross(
+            line_data[i].point2_normalized.homogeneous()).normalized();
+
+    // backprojected plane
+    Eigen::Vector4d p = pose_data[i].proj_matrix.transpose() * line2d;
+    p = p / p.topRows<3>().norm();
+    A +=  p * p.transpose();
+  }
+
+
+  Eigen::SelfAdjointEigenSolver<Eigen::Matrix4d> eigen_solver(A);
+
+  Eigen::Matrix<double, 4, 2> basis = eigen_solver.eigenvectors().leftCols<2>();
+  
+  // transform basis such that the line is represented
+  //    X(lambda) = X0 + lambda * X1
+
+  Eigen::Matrix2d H;
+  H << basis(3,0), basis(3,1),
+       basis(3,1),-basis(3,0);
+  basis = basis * H;
+
+  Eigen::Vector3d X0, X1;
+  X0 = basis.block<3,1>(0,0) / basis(3,0);
+  X1 = basis.block<3,1>(0,1).normalized();
+  
+  // compute closest point on the line for each line segment endpoint
+  std::vector<double> parameter_values;
+  for(int i = 0; i < line_data.size(); ++i) {
+    Eigen::Vector3d Z0 = pose_data[i].proj_matrix * X0.homogeneous();
+    Eigen::Vector3d Z1 = pose_data[i].proj_matrix.leftCols<3>() * X1;
+
+    Eigen::Matrix<double,3,2> M;
+    M << Z1, line_data[i].point1_normalized.homogeneous();
+
+    Eigen::Vector2d z = M.colPivHouseholderQr().solve(Z0);
+    parameter_values.push_back(z(0));
+
+    M.col(1) = line_data[i].point1_normalized.homogeneous();
+    z = M.colPivHouseholderQr().solve(Z0);
+    parameter_values.push_back(z(0));
+  }
+
+  auto mm = std::minmax_element(parameter_values.begin(), parameter_values.end());
+  
+  Eigen::Vector3d line_point1 = X0 + X1 * (*mm.first);
+  Eigen::Vector3d line_point2 = X0 + X1 * (*mm.second);
+
+  return {std::make_pair(line_point1, line_point2)};
+}
+
+void LineTriangulationEstimator::Residuals(const std::vector<X_t>& line_data,
+                                       const std::vector<Y_t>& pose_data,
+                                       const M_t& xyz,
+                                       std::vector<double>* residuals) const {
+  CHECK_EQ(line_data.size(), pose_data.size());
+
+  residuals->resize(line_data.size());
+
+  for (size_t i = 0; i < line_data.size(); ++i) {
+    if (residual_type_ == TriangulationEstimator::ResidualType::REPROJECTION_ERROR) {
+      (*residuals)[i] = CalculateSquaredLineReprojectionError(
+        line_data[i].point1, line_data[i].point2, xyz.first, xyz.second, 
+        pose_data[i].proj_matrix, *pose_data[i].camera);
+    } else if (residual_type_ == TriangulationEstimator::ResidualType::ANGULAR_ERROR) {
+      const double angular_error = CalculateNormalizedLineAngularError(
+           line_data[i].point1_normalized, line_data[i].point2_normalized,
+           xyz.first, xyz.second, pose_data[i].proj_matrix);
+  
+      (*residuals)[i] = angular_error * angular_error;
+    }
+  }
+}
+
+bool EstimateLineTriangulation(
+    const EstimateTriangulationOptions& options,
+    const std::vector<LineTriangulationEstimator::LineData>& line_data,
+    const std::vector<LineTriangulationEstimator::PoseData>& pose_data,
+    std::vector<char>* inlier_mask, std::pair<Eigen::Vector3d, Eigen::Vector3d>* xyz) {
+  CHECK_NOTNULL(inlier_mask);
+  CHECK_NOTNULL(xyz);
+  CHECK_GE(line_data.size(), 2);
+  CHECK_EQ(line_data.size(), pose_data.size());
+  options.Check();
+
+  // Robustly estimate track using LORANSAC.
+  LORANSAC<LineTriangulationEstimator, LineTriangulationEstimator,
+           InlierSupportMeasurer, CombinationSampler>
+      ransac(options.ransac_options);
+  ransac.estimator.SetMinTriAngle(options.min_tri_angle);
+  ransac.estimator.SetResidualType(options.residual_type);
+  ransac.local_estimator.SetMinTriAngle(options.min_tri_angle);
+  ransac.local_estimator.SetResidualType(options.residual_type);
+  const auto report = ransac.Estimate(line_data, pose_data);
+  if (!report.success) {
+    return false;
+  }
+
+  *inlier_mask = report.inlier_mask;
+  *xyz = report.model;
+
+  return report.success;
+}
+
 }  // namespace colmap

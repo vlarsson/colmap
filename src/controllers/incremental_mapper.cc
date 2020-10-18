@@ -41,7 +41,7 @@ size_t TriangulateImage(const IncrementalMapperOptions& options,
   std::cout << "  => Continued observations: " << image.NumPoints3D()
             << std::endl;
   const size_t num_tris =
-      mapper->TriangulateImage(options.Triangulation(), image.ImageId());
+      mapper->TriangulateImage(options.Triangulation(), options.LineTriangulation(), image.ImageId());
   std::cout << "  => Added observations: " << num_tris << std::endl;
   return num_tris;
 }
@@ -80,7 +80,7 @@ void IterativeLocalRefinement(const IncrementalMapperOptions& options,
   auto ba_options = options.LocalBundleAdjustment();
   for (int i = 0; i < options.ba_local_max_refinements; ++i) {
     const auto report = mapper->AdjustLocalBundle(
-        options.Mapper(), ba_options, options.Triangulation(), image_id,
+        options.Mapper(), ba_options, options.Triangulation(), options.LineTriangulation(), image_id,
         mapper->GetModifiedPoints3D());
     std::cout << "  => Merged observations: " << report.num_merged_observations
               << std::endl;
@@ -109,7 +109,7 @@ void IterativeGlobalRefinement(const IncrementalMapperOptions& options,
   PrintHeading1("Retriangulation");
   CompleteAndMergeTracks(options, mapper);
   std::cout << "  => Retriangulated observations: "
-            << mapper->Retriangulate(options.Triangulation()) << std::endl;
+            << mapper->Retriangulate(options.Triangulation(), options.LineTriangulation()) << std::endl;
 
   for (int i = 0; i < options.ba_global_max_refinements; ++i) {
     const size_t num_observations =
@@ -177,11 +177,11 @@ size_t FilterImages(const IncrementalMapperOptions& options,
 size_t CompleteAndMergeTracks(const IncrementalMapperOptions& options,
                               IncrementalMapper* mapper) {
   const size_t num_completed_observations =
-      mapper->CompleteTracks(options.Triangulation());
+      mapper->CompleteTracks(options.Triangulation(), options.LineTriangulation());
   std::cout << "  => Completed observations: " << num_completed_observations
             << std::endl;
   const size_t num_merged_observations =
-      mapper->MergeTracks(options.Triangulation());
+      mapper->MergeTracks(options.Triangulation(), options.LineTriangulation());
   std::cout << "  => Merged observations: " << num_merged_observations
             << std::endl;
   return num_completed_observations + num_merged_observations;
@@ -203,6 +203,15 @@ IncrementalMapper::Options IncrementalMapperOptions::Mapper() const {
 IncrementalTriangulator::Options IncrementalMapperOptions::Triangulation()
     const {
   IncrementalTriangulator::Options options = triangulation;
+  options.min_focal_length_ratio = min_focal_length_ratio;
+  options.max_focal_length_ratio = max_focal_length_ratio;
+  options.max_extra_param = max_extra_param;
+  return options;
+}
+
+IncrementalLineTriangulator::Options IncrementalMapperOptions::LineTriangulation()
+    const {
+  IncrementalLineTriangulator::Options options = line_triangulation;
   options.min_focal_length_ratio = min_focal_length_ratio;
   options.max_focal_length_ratio = max_focal_length_ratio;
   options.max_extra_param = max_extra_param;

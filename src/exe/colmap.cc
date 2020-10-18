@@ -1541,6 +1541,7 @@ int RunPointTriangulator(int argc, char** argv) {
   //////////////////////////////////////////////////////////////////////////////
 
   const auto tri_options = mapper_options.Triangulation();
+  const auto line_tri_options = mapper_options.LineTriangulation();
 
   const auto& reg_image_ids = reconstruction.RegImageIds();
 
@@ -1556,7 +1557,7 @@ int RunPointTriangulator(int argc, char** argv) {
     std::cout << "  => Image sees " << num_existing_points3D << " / "
               << image.NumObservations() << " points" << std::endl;
 
-    mapper.TriangulateImage(tri_options, image_id);
+    mapper.TriangulateImage(tri_options, line_tri_options, image_id);
 
     std::cout << "  => Triangulated "
               << (image.NumPoints3D() - num_existing_points3D) << " points"

@@ -100,6 +100,7 @@ IncrementalMapper::IncrementalMapper(const DatabaseCache* database_cache)
     : database_cache_(database_cache),
       reconstruction_(nullptr),
       triangulator_(nullptr),
+      line_triangulator_(nullptr),
       num_total_reg_images_(0),
       num_shared_reg_images_(0),
       prev_init_image_pair_id_(kInvalidImagePairId) {}
@@ -108,9 +109,12 @@ void IncrementalMapper::BeginReconstruction(Reconstruction* reconstruction) {
   CHECK(reconstruction_ == nullptr);
   reconstruction_ = reconstruction;
   reconstruction_->Load(*database_cache_);
-  reconstruction_->SetUp(&database_cache_->CorrespondenceGraph());
+  reconstruction_->SetUp(&database_cache_->CorrespondenceGraph(),
+        &database_cache_->LineCorrespondenceGraph());
   triangulator_.reset(new IncrementalTriangulator(
       &database_cache_->CorrespondenceGraph(), reconstruction));
+  line_triangulator_.reset(new IncrementalLineTriangulator(
+      &database_cache_->LineCorrespondenceGraph(), reconstruction));
 
   num_shared_reg_images_ = 0;
   num_reg_images_per_camera_.clear();
@@ -141,6 +145,7 @@ void IncrementalMapper::EndReconstruction(const bool discard) {
   reconstruction_->TearDown();
   reconstruction_ = nullptr;
   triangulator_.reset();
+  line_triangulator_.reset();
 }
 
 bool IncrementalMapper::FindInitialImagePair(const Options& options,
@@ -515,6 +520,7 @@ bool IncrementalMapper::RegisterNextImage(const Options& options,
   reconstruction_->RegisterImage(image_id);
   RegisterImageEvent(image_id);
 
+  // TODO: update here once lines are added to pose estimation!
   for (size_t i = 0; i < inlier_mask.size(); ++i) {
     if (inlier_mask[i]) {
       const point2D_t point2D_idx = tri_corrs[i].first;
@@ -533,34 +539,43 @@ bool IncrementalMapper::RegisterNextImage(const Options& options,
 
 size_t IncrementalMapper::TriangulateImage(
     const IncrementalTriangulator::Options& tri_options,
+    const IncrementalLineTriangulator::Options& line_tri_options,
     const image_t image_id) {
   CHECK_NOTNULL(reconstruction_);
-  return triangulator_->TriangulateImage(tri_options, image_id);
+  return triangulator_->TriangulateImage(tri_options, image_id) + 
+        line_triangulator_->TriangulateImage(line_tri_options, image_id);
 }
 
 size_t IncrementalMapper::Retriangulate(
-    const IncrementalTriangulator::Options& tri_options) {
+    const IncrementalTriangulator::Options& tri_options,
+    const IncrementalLineTriangulator::Options& line_tri_options) {
   CHECK_NOTNULL(reconstruction_);
-  return triangulator_->Retriangulate(tri_options);
+  // TODO: Should we do retriangulation for lines? Maybe
+  return triangulator_->Retriangulate(tri_options);         
 }
 
 size_t IncrementalMapper::CompleteTracks(
-    const IncrementalTriangulator::Options& tri_options) {
+    const IncrementalTriangulator::Options& tri_options,
+    const IncrementalLineTriangulator::Options& line_tri_options) {
   CHECK_NOTNULL(reconstruction_);
-  return triangulator_->CompleteAllTracks(tri_options);
+  return triangulator_->CompleteAllTracks(tri_options) + 
+         line_triangulator_->CompleteAllTracks(line_tri_options);
 }
 
 size_t IncrementalMapper::MergeTracks(
-    const IncrementalTriangulator::Options& tri_options) {
+    const IncrementalTriangulator::Options& tri_options,
+    const IncrementalLineTriangulator::Options& line_tri_options) {
   CHECK_NOTNULL(reconstruction_);
-  return triangulator_->MergeAllTracks(tri_options);
+  return triangulator_->MergeAllTracks(tri_options) + 
+         line_triangulator_->MergeAllTracks(line_tri_options);
 }
 
 IncrementalMapper::LocalBundleAdjustmentReport
 IncrementalMapper::AdjustLocalBundle(
     const Options& options, const BundleAdjustmentOptions& ba_options,
-    const IncrementalTriangulator::Options& tri_options, const image_t image_id,
-    const std::unordered_set<point3D_t>& point3D_ids) {
+    const IncrementalTriangulator::Options& tri_options,
+    const IncrementalLineTriangulator::Options& line_tri_options,
+    const image_t image_id, const std::unordered_set<point3D_t>& point3D_ids) {
   CHECK_NOTNULL(reconstruction_);
   CHECK(options.Check());
 

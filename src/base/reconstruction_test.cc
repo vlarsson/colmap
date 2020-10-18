@@ -62,7 +62,7 @@ void GenerateReconstruction(const image_t num_images,
     correspondence_graph->AddImage(image_id, kNumPoints2D);
   }
 
-  reconstruction->SetUp(correspondence_graph);
+  reconstruction->SetUp(correspondence_graph, nullptr);
 }
 
 BOOST_AUTO_TEST_CASE(TestEmpty) {
