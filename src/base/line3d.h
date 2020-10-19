@@ -52,7 +52,7 @@ class Line3D {
 
   Line3D();
 
-  // The point coordinate in world space.
+  // The point coordinate in world space.  
   inline const Eigen::Vector3d& XYZ1() const;
   inline const Eigen::Vector3d& XYZ2() const;
   inline Eigen::Vector3d& XYZ1();

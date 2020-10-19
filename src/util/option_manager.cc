@@ -583,6 +583,30 @@ void OptionManager::AddMapperOptions() {
                               &mapper->triangulation.min_angle);
   AddAndRegisterDefaultOption("Mapper.tri_ignore_two_view_tracks",
                               &mapper->triangulation.ignore_two_view_tracks);
+
+  // IncrementalTriangulator.
+  AddAndRegisterDefaultOption("Mapper.line_tri_max_transitivity",
+                              &mapper->line_triangulation.max_transitivity);
+  AddAndRegisterDefaultOption("Mapper.line_tri_create_max_angle_error",
+                              &mapper->line_triangulation.create_max_angle_error);
+  AddAndRegisterDefaultOption("Mapper.line_tri_continue_max_angle_error",
+                              &mapper->line_triangulation.continue_max_angle_error);
+  AddAndRegisterDefaultOption("Mapper.line_tri_merge_max_reproj_error",
+                              &mapper->line_triangulation.merge_max_reproj_error);
+  AddAndRegisterDefaultOption("Mapper.line_tri_complete_max_reproj_error",
+                              &mapper->line_triangulation.complete_max_reproj_error);
+  AddAndRegisterDefaultOption("Mapper.line_tri_complete_max_transitivity",
+                              &mapper->line_triangulation.complete_max_transitivity);
+  AddAndRegisterDefaultOption("Mapper.line_tri_re_max_angle_error",
+                              &mapper->line_triangulation.re_max_angle_error);
+  AddAndRegisterDefaultOption("Mapper.line_tri_re_min_ratio",
+                              &mapper->line_triangulation.re_min_ratio);
+  AddAndRegisterDefaultOption("Mapper.line_tri_re_max_trials",
+                              &mapper->line_triangulation.re_max_trials);
+  AddAndRegisterDefaultOption("Mapper.line_tri_min_angle",
+                              &mapper->line_triangulation.min_angle);
+  AddAndRegisterDefaultOption("Mapper.line_tri_ignore_two_view_tracks",
+                              &mapper->line_triangulation.ignore_two_view_tracks);
 }
 
 void OptionManager::AddPatchMatchStereoOptions() {

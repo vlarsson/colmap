@@ -551,7 +551,8 @@ size_t IncrementalMapper::Retriangulate(
     const IncrementalLineTriangulator::Options& line_tri_options) {
   CHECK_NOTNULL(reconstruction_);
   // TODO: Should we do retriangulation for lines? Maybe
-  return triangulator_->Retriangulate(tri_options);         
+  return triangulator_->Retriangulate(tri_options) + 
+      line_triangulator_->Retriangulate(line_tri_options);         
 }
 
 size_t IncrementalMapper::CompleteTracks(
@@ -575,7 +576,8 @@ IncrementalMapper::AdjustLocalBundle(
     const Options& options, const BundleAdjustmentOptions& ba_options,
     const IncrementalTriangulator::Options& tri_options,
     const IncrementalLineTriangulator::Options& line_tri_options,
-    const image_t image_id, const std::unordered_set<point3D_t>& point3D_ids) {
+    const image_t image_id, const std::unordered_set<point3D_t>& point3D_ids,
+    const std::unordered_set<point3D_t>& line3D_ids) {
   CHECK_NOTNULL(reconstruction_);
   CHECK(options.Check());
 
@@ -646,6 +648,16 @@ IncrementalMapper::AdjustLocalBundle(
       }
     }
 
+    std::unordered_set<point3D_t> variable_line3D_ids;
+    for (const point3D_t line3D_id : line3D_ids) {
+      const Line3D& line3D = reconstruction_->Line3D(line3D_id);
+      const size_t kMaxTrackLength = 15;
+      if (!line3D.HasError() || line3D.Track().Length() <= kMaxTrackLength) {
+        ba_config.AddVariableLine(line3D_id);
+        variable_point3D_ids.insert(line3D_id);
+      }
+    }
+
     // Adjust the local bundle.
     BundleAdjuster bundle_adjuster(ba_options, ba_config);
     bundle_adjuster.Solve(reconstruction_);
@@ -653,17 +665,23 @@ IncrementalMapper::AdjustLocalBundle(
     report.num_adjusted_observations =
         bundle_adjuster.Summary().num_residuals / 2;
 
-    // Merge refined tracks with other existing points.
+    // Merge refined tracks with other existing points / lines.
     report.num_merged_observations =
         triangulator_->MergeTracks(tri_options, variable_point3D_ids);
+    report.num_merged_observations +=
+        line_triangulator_->MergeTracks(line_tri_options, variable_line3D_ids);
     // Complete tracks that may have failed to triangulate before refinement
     // of camera pose and calibration in bundle-adjustment. This may avoid
     // that some points are filtered and it helps for subsequent image
     // registrations.
     report.num_completed_observations =
         triangulator_->CompleteTracks(tri_options, variable_point3D_ids);
+    report.num_completed_observations =
+        line_triangulator_->CompleteTracks(line_tri_options, variable_line3D_ids);
     report.num_completed_observations +=
         triangulator_->CompleteImage(tri_options, image_id);
+    report.num_completed_observations +=
+        line_triangulator_->CompleteImage(line_tri_options, image_id);        
   }
 
   // Filter both the modified images and all changed 3D points to make sure
@@ -680,6 +698,7 @@ IncrementalMapper::AdjustLocalBundle(
       options.filter_max_reproj_error, options.filter_min_tri_angle,
       point3D_ids);
 
+  reconstruction_->NormalizeLines3D();
   return report;
 }
 
@@ -695,6 +714,7 @@ bool IncrementalMapper::AdjustGlobalBundle(
 
   // Avoid degeneracies in bundle adjustment.
   reconstruction_->FilterObservationsWithNegativeDepth();
+  reconstruction_->FilterLineObservationsWithNegativeDepth();
 
   // Configure bundle adjustment.
   BundleAdjustmentConfig ba_config;
@@ -743,6 +763,7 @@ bool IncrementalMapper::AdjustParallelGlobalBundle(
 
   // Avoid degeneracies in bundle adjustment.
   reconstruction_->FilterObservationsWithNegativeDepth();
+  reconstruction_->FilterLineObservationsWithNegativeDepth();
 
   // Configure bundle adjustment.
   BundleAdjustmentConfig ba_config;
@@ -795,6 +816,13 @@ size_t IncrementalMapper::FilterPoints(const Options& options) {
                                             options.filter_min_tri_angle);
 }
 
+size_t IncrementalMapper::FilterLines(const Options& options) {
+  CHECK_NOTNULL(reconstruction_);
+  CHECK(options.Check());
+  return reconstruction_->FilterAllLines3D(options.filter_max_reproj_error,
+                                            options.filter_min_tri_angle);
+}
+
 const Reconstruction& IncrementalMapper::GetReconstruction() const {
   CHECK_NOTNULL(reconstruction_);
   return *reconstruction_;
@@ -812,8 +840,16 @@ const std::unordered_set<point3D_t>& IncrementalMapper::GetModifiedPoints3D() {
   return triangulator_->GetModifiedPoints3D();
 }
 
+const std::unordered_set<point3D_t>& IncrementalMapper::GetModifiedLines3D() {
+  return line_triangulator_->GetModifiedLines3D();
+}
+
 void IncrementalMapper::ClearModifiedPoints3D() {
   triangulator_->ClearModifiedPoints3D();
+}
+
+void IncrementalMapper::ClearModifiedLines3D() {
+  line_triangulator_->ClearModifiedLines3D();
 }
 
 std::vector<image_t> IncrementalMapper::FindFirstInitialImage(

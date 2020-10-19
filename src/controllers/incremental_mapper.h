@@ -183,6 +183,8 @@ class IncrementalMapperController : public Thread {
 // Globally filter points and images in mapper.
 size_t FilterPoints(const IncrementalMapperOptions& options,
                     IncrementalMapper* mapper);
+size_t FilterLines(const IncrementalMapperOptions& options,
+                    IncrementalMapper* mapper);
 size_t FilterImages(const IncrementalMapperOptions& options,
                     IncrementalMapper* mapper);
 

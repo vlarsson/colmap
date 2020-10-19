@@ -545,6 +545,41 @@ void Reconstruction::Normalize(const double extent, const double p0,
     point3D.second.XYZ() -= translation;
     point3D.second.XYZ() *= scale;
   }
+  for (auto& line3D : lines3D_) {
+    line3D.second.XYZ1() -= translation;
+    line3D.second.XYZ1() *= scale;
+    line3D.second.XYZ2() -= translation;
+    line3D.second.XYZ2() *= scale;
+  }
+  NormalizeLines3D();
+}
+
+void Reconstruction::NormalizeLines3D() {
+  for(auto &line3D : lines3D_) {
+    size_t num_obs = line3D.second.Track().Length();
+    std::vector<Eigen::Matrix3x4d> proj_matrices;
+    std::vector<Eigen::Vector2d> points1;
+    std::vector<Eigen::Vector2d> points2;
+
+    proj_matrices.reserve(num_obs);
+    points1.reserve(num_obs);
+    points2.reserve(num_obs);
+
+    for(const TrackElement &elem : line3D.second.Track().Elements()) {
+      const class Image &image = Image(elem.image_id);
+      const class Camera &camera = Camera(image.CameraId());
+      const class Line2D &line2D = image.Line2D(elem.point2D_idx);
+      proj_matrices.push_back(image.ProjectionMatrix());
+      points1.push_back(camera.ImageToWorld(line2D.XY1()));
+      points2.push_back(camera.ImageToWorld(line2D.XY2()));
+    }
+
+    std::pair<Eigen::Vector3d, Eigen::Vector3d> xyz = 
+        AdjustLineMultiView(std::make_pair(line3D.second.XYZ1(),line3D.second.XYZ2()), proj_matrices, points1, points2);
+
+    line3D.second.SetXYZ(xyz.first, xyz.second);
+
+  }  
 }
 
 void Reconstruction::Transform(const SimilarityTransform3& tform) {
@@ -553,6 +588,10 @@ void Reconstruction::Transform(const SimilarityTransform3& tform) {
   }
   for (auto& point3D : points3D_) {
     tform.TransformPoint(&point3D.second.XYZ());
+  }
+  for (auto& line3D : lines3D_) {
+    tform.TransformPoint(&line3D.second.XYZ1());
+    tform.TransformPoint(&line3D.second.XYZ2());    
   }
 }
 
@@ -839,6 +878,19 @@ size_t Reconstruction::FilterAllPoints3D(const double max_reproj_error,
   return num_filtered;
 }
 
+size_t Reconstruction::FilterAllLines3D(const double max_reproj_error,
+                                         const double min_tri_angle) {
+  // Important: First filter observations and points with large reprojection
+  // error, so that observations with large reprojection error do not make
+  // a point stable through a large triangulation angle.
+  const std::unordered_set<point3D_t>& line3D_ids = Line3DIds();
+  size_t num_filtered = 0;
+  num_filtered +=
+      FilterLines3DWithLargeReprojectionError(max_reproj_error, line3D_ids);
+  // TODO: figure out a good filter to triangulation angle of lines
+  return num_filtered;
+}
+
 size_t Reconstruction::FilterObservationsWithNegativeDepth() {
   size_t num_filtered = 0;
   for (const auto image_id : reg_image_ids_) {
@@ -851,6 +903,34 @@ size_t Reconstruction::FilterObservationsWithNegativeDepth() {
         const class Point3D& point3D = Point3D(point2D.Point3DId());
         if (!HasPointPositiveDepth(proj_matrix, point3D.XYZ())) {
           DeleteObservation(image_id, point2D_idx);
+          num_filtered += 1;
+        }
+      }
+    }
+  }
+  return num_filtered;
+}
+
+size_t Reconstruction::FilterLineObservationsWithNegativeDepth() {
+  size_t num_filtered = 0;
+  for (const auto image_id : reg_image_ids_) {
+    const class Image& image = Image(image_id);
+    const class Camera& camera = Camera(image.CameraId());
+    const Eigen::Matrix3x4d proj_matrix = image.ProjectionMatrix();
+    for (point2D_t line2D_idx = 0; line2D_idx < image.NumLines2D();
+         ++line2D_idx) {
+      const Line2D& line2D = image.Line2D(line2D_idx);
+      if (line2D.HasLine3D()) {
+        const class Line3D& line3D = Line3D(line2D.Line3DId());
+
+        Eigen::Vector3d X1 = BackprojectToLine(camera.ImageToWorld(line2D.XY1()), 
+              proj_matrix, line3D.XYZ1(), line3D.XYZ2());
+
+        Eigen::Vector3d X2 = BackprojectToLine(camera.ImageToWorld(line2D.XY2()), 
+              proj_matrix, line3D.XYZ1(), line3D.XYZ2());
+
+        if (!HasPointPositiveDepth(proj_matrix, X1) || !HasPointPositiveDepth(proj_matrix, X2)) {
+          DeleteLineObservation(image_id, line2D_idx);
           num_filtered += 1;
         }
       }
@@ -1518,6 +1598,61 @@ size_t Reconstruction::FilterPoints3DWithLargeReprojectionError(
         DeleteObservation(track_el.image_id, track_el.point2D_idx);
       }
       point3D.SetError(reproj_error_sum / point3D.Track().Length());
+    }
+  }
+
+  return num_filtered;
+}
+
+
+size_t Reconstruction::FilterLines3DWithLargeReprojectionError(
+    const double max_reproj_error,
+    const std::unordered_set<point3D_t>& line3D_ids) {
+  const double max_squared_reproj_error = max_reproj_error * max_reproj_error;
+
+  // Number of filtered points.
+  size_t num_filtered = 0;
+
+  for (const auto line3D_id : line3D_ids) {
+    if (!ExistsLine3D(line3D_id)) {
+      continue;
+    }
+
+    class Line3D& line3D = Line3D(line3D_id);
+
+    if (line3D.Track().Length() < 2) {
+      DeleteLine3D(line3D_id);
+      num_filtered += line3D.Track().Length();
+      continue;
+    }
+
+    double reproj_error_sum = 0.0;
+
+    std::vector<TrackElement> track_els_to_delete;
+
+    for (const auto& track_el : line3D.Track().Elements()) {
+      const class Image& image = Image(track_el.image_id);
+      const class Camera& camera = Camera(image.CameraId());
+      const Line2D& line2D = image.Line2D(track_el.point2D_idx);
+      const double squared_reproj_error = CalculateSquaredLineReprojectionError(
+          line2D.XY1(), line2D.XY2(), line3D.XYZ1(), line3D.XYZ2(),
+          image.Qvec(), image.Tvec(), camera);
+      if (squared_reproj_error > max_squared_reproj_error) {
+        track_els_to_delete.push_back(track_el);
+      } else {
+        reproj_error_sum += std::sqrt(squared_reproj_error);
+      }
+    }
+
+    if (track_els_to_delete.size() >= line3D.Track().Length() - 1) {
+      num_filtered += line3D.Track().Length();
+      DeleteLine3D(line3D_id);
+    } else {
+      num_filtered += track_els_to_delete.size();
+      for (const auto& track_el : track_els_to_delete) {
+        DeleteLineObservation(track_el.image_id, track_el.point2D_idx);
+      }
+      line3D.SetError(reproj_error_sum / line3D.Track().Length());
     }
   }
 

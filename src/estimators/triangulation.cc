@@ -179,60 +179,50 @@ std::vector<LineTriangulationEstimator::M_t> LineTriangulationEstimator::Estimat
   CHECK_GE(line_data.size(), 2);
   CHECK_EQ(line_data.size(), pose_data.size());
   
-  Eigen::Matrix4d A;
-  A.setZero();
-
-  for(int i = 0; i < line_data.size(); ++i) {
-
-    Eigen::Vector3d line2d = line_data[i].point1_normalized.homogeneous().cross(
-            line_data[i].point2_normalized.homogeneous()).normalized();
-
-    // backprojected plane
-    Eigen::Vector4d p = pose_data[i].proj_matrix.transpose() * line2d;
-    p = p / p.topRows<3>().norm();
-    A +=  p * p.transpose();
+  const int N = pose_data.size();
+  std::vector<Eigen::Matrix3x4d> proj_matrices(N);
+  std::vector<Eigen::Vector2d> points1(N);
+  std::vector<Eigen::Vector2d> points2(N);
+  
+  for(size_t i = 0; i < line_data.size(); ++i) {
+    proj_matrices[i] = pose_data[i].proj_matrix;
+    points1[i] = line_data[i].point1_normalized;
+    points2[i] = line_data[i].point2_normalized;    
   }
 
+  std::pair<Eigen::Vector3d, Eigen::Vector3d> xyz = TriangulateMultiViewLine(proj_matrices, points1, points2);
 
-  Eigen::SelfAdjointEigenSolver<Eigen::Matrix4d> eigen_solver(A);
+// Check for cheirality constraint.
+  for (size_t i = 0; i < line_data.size(); ++i) {
+    // Find closest points on the 3D line
+    Eigen::Vector3d X1 = BackprojectToLine(line_data[i].point1_normalized, 
+          pose_data[i].proj_matrix, xyz.first, xyz.second);
+    Eigen::Vector3d X2 = BackprojectToLine(line_data[i].point2_normalized, 
+          pose_data[i].proj_matrix, xyz.first, xyz.second);
 
-  Eigen::Matrix<double, 4, 2> basis = eigen_solver.eigenvectors().leftCols<2>();
-  
-  // transform basis such that the line is represented
-  //    X(lambda) = X0 + lambda * X1
-
-  Eigen::Matrix2d H;
-  H << basis(3,0), basis(3,1),
-       basis(3,1),-basis(3,0);
-  basis = basis * H;
-
-  Eigen::Vector3d X0, X1;
-  X0 = basis.block<3,1>(0,0) / basis(3,0);
-  X1 = basis.block<3,1>(0,1).normalized();
-  
-  // compute closest point on the line for each line segment endpoint
-  std::vector<double> parameter_values;
-  for(int i = 0; i < line_data.size(); ++i) {
-    Eigen::Vector3d Z0 = pose_data[i].proj_matrix * X0.homogeneous();
-    Eigen::Vector3d Z1 = pose_data[i].proj_matrix.leftCols<3>() * X1;
-
-    Eigen::Matrix<double,3,2> M;
-    M << Z1, line_data[i].point1_normalized.homogeneous();
-
-    Eigen::Vector2d z = M.colPivHouseholderQr().solve(Z0);
-    parameter_values.push_back(z(0));
-
-    M.col(1) = line_data[i].point1_normalized.homogeneous();
-    z = M.colPivHouseholderQr().solve(Z0);
-    parameter_values.push_back(z(0));
+    if (!HasPointPositiveDepth(pose_data[i].proj_matrix, X1)) {
+      return std::vector<M_t>();
+    }
+    if (!HasPointPositiveDepth(pose_data[i].proj_matrix, X2)) {
+      return std::vector<M_t>();
+    }
   }
 
-  auto mm = std::minmax_element(parameter_values.begin(), parameter_values.end());
-  
-  Eigen::Vector3d line_point1 = X0 + X1 * (*mm.first);
-  Eigen::Vector3d line_point2 = X0 + X1 * (*mm.second);
+  // TODO think about how to define triangulation angle here...
+  /*
+  // Check for sufficient triangulation angle.
+  for (size_t i = 0; i < pose_data.size(); ++i) {
+    for (size_t j = 0; j < i; ++j) {
+      const double tri_angle = CalculateTriangulationAngle(
+          pose_data[i].proj_center, pose_data[j].proj_center, xyz);
+      if (tri_angle >= min_tri_angle_) {
+        return std::vector<M_t>{xyz};
+      }
+    }
+  }
+  */
 
-  return {std::make_pair(line_point1, line_point2)};
+  return {xyz};
 }
 
 void LineTriangulationEstimator::Residuals(const std::vector<X_t>& line_data,
@@ -271,7 +261,7 @@ bool EstimateLineTriangulation(
 
   // Robustly estimate track using LORANSAC.
   LORANSAC<LineTriangulationEstimator, LineTriangulationEstimator,
-           InlierSupportMeasurer, CombinationSampler>
+           MEstimatorSupportMeasurer, CombinationSampler>
       ransac(options.ransac_options);
   ransac.estimator.SetMinTriAngle(options.min_tri_angle);
   ransac.estimator.SetResidualType(options.residual_type);

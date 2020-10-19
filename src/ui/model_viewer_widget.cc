@@ -38,6 +38,8 @@
 
 const Eigen::Vector4f kSelectedPointColor(0.0f, 1.0f, 0.0f, 1.0f);
 
+const Eigen::Vector4f kLineSegmentColor(0.0f, 0.0f, 1.0f, 1.0f);
+
 const Eigen::Vector4f kSelectedImagePlaneColor(1.0f, 0.0f, 1.0f, 0.6f);
 const Eigen::Vector4f kSelectedImageFrameColor(0.8f, 0.0f, 0.8f, 1.0f);
 
@@ -843,7 +845,7 @@ void ModelViewerWidget::UploadPointConnectionData() {
       painter_line.point2.z = static_cast<float>(line3D.second.XYZ2(2));
 
       
-      Eigen::Vector4f color = kSelectedPointColor; // TODO      
+      Eigen::Vector4f color = kLineSegmentColor;
 
       painter_line.point1.r = color(0);
       painter_line.point1.g = color(1);

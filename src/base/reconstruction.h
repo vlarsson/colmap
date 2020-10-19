@@ -194,6 +194,10 @@ class Reconstruction {
   void Normalize(const double extent = 10.0, const double p0 = 0.1,
                  const double p1 = 0.9, const bool use_images = true);
 
+  // Adjust the extent of all triangulated the 3D line segments such that
+  // they are consistent with the 2d line segments
+  void NormalizeLines3D();
+
   // Apply the 3D similarity transformation to all images and points.
   void Transform(const SimilarityTransform3& tform);
 
@@ -245,11 +249,14 @@ class Reconstruction {
                                 const std::unordered_set<image_t>& image_ids);
   size_t FilterAllPoints3D(const double max_reproj_error,
                            const double min_tri_angle);
+  size_t FilterAllLines3D(const double max_reproj_error,
+                           const double min_tri_angle);
 
   // Filter observations that have negative depth.
   //
   // @return    The number of filtered observations.
   size_t FilterObservationsWithNegativeDepth();
+  size_t FilterLineObservationsWithNegativeDepth();
 
   // Filter images without observations or bogus camera parameters.
   //
@@ -319,6 +326,9 @@ class Reconstruction {
       const double min_tri_angle,
       const std::unordered_set<point3D_t>& point3D_ids);
   size_t FilterPoints3DWithLargeReprojectionError(
+      const double max_reproj_error,
+      const std::unordered_set<point3D_t>& point3D_ids);
+  size_t FilterLines3DWithLargeReprojectionError(
       const double max_reproj_error,
       const std::unordered_set<point3D_t>& point3D_ids);
 

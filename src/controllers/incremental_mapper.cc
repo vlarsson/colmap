@@ -81,7 +81,7 @@ void IterativeLocalRefinement(const IncrementalMapperOptions& options,
   for (int i = 0; i < options.ba_local_max_refinements; ++i) {
     const auto report = mapper->AdjustLocalBundle(
         options.Mapper(), ba_options, options.Triangulation(), options.LineTriangulation(), image_id,
-        mapper->GetModifiedPoints3D());
+        mapper->GetModifiedPoints3D(), mapper->GetModifiedLines3D());
     std::cout << "  => Merged observations: " << report.num_merged_observations
               << std::endl;
     std::cout << "  => Completed observations: "
@@ -102,6 +102,7 @@ void IterativeLocalRefinement(const IncrementalMapperOptions& options,
         BundleAdjustmentOptions::LossFunctionType::TRIVIAL;
   }
   mapper->ClearModifiedPoints3D();
+  mapper->ClearModifiedLines3D();
 }
 
 void IterativeGlobalRefinement(const IncrementalMapperOptions& options,
@@ -118,6 +119,7 @@ void IterativeGlobalRefinement(const IncrementalMapperOptions& options,
     AdjustGlobalBundle(options, mapper);
     num_changed_observations += CompleteAndMergeTracks(options, mapper);
     num_changed_observations += FilterPoints(options, mapper);
+    num_changed_observations += FilterLines(options, mapper);
     const double changed =
         static_cast<double>(num_changed_observations) / num_observations;
     std::cout << StringPrintf("  => Changed observations: %.6f", changed)
@@ -163,6 +165,15 @@ size_t FilterPoints(const IncrementalMapperOptions& options,
   const size_t num_filtered_observations =
       mapper->FilterPoints(options.Mapper());
   std::cout << "  => Filtered observations: " << num_filtered_observations
+            << std::endl;
+  return num_filtered_observations;
+}
+
+size_t FilterLines(const IncrementalMapperOptions& options,
+                    IncrementalMapper* mapper) {
+  const size_t num_filtered_observations =
+      mapper->FilterLines(options.Mapper());
+  std::cout << "  => Filtered line observations: " << num_filtered_observations
             << std::endl;
   return num_filtered_observations;
 }
@@ -471,6 +482,7 @@ void IncrementalMapperController::Reconstruct(
 
       AdjustGlobalBundle(*options_, &mapper);
       FilterPoints(*options_, &mapper);
+      FilterLines(*options_, &mapper);
       FilterImages(*options_, &mapper);
 
       // Initial image pair failed to register.

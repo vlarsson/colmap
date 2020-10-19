@@ -220,3 +220,24 @@ BOOST_AUTO_TEST_CASE(TestHasPointPositiveDepth) {
       HasPointPositiveDepth(proj_matrix, Eigen::Vector3d(0, 0, -1));
   BOOST_CHECK(!check4);
 }
+
+
+BOOST_AUTO_TEST_CASE(TestBackProjectToLine) {
+  const Eigen::Vector4d qvec(1, 0, 0, 0);
+  const Eigen::Vector3d tvec(0, 0, 0);
+  const auto proj_matrix = ComposeProjectionMatrix(qvec, tvec);
+
+  Eigen::Vector3d X0(0.2,0.3,0.5);
+  Eigen::Vector3d X1(0.4,0.5,0.7);
+
+  for(double t = 0.0; t < 1.0; t += 0.1) {
+
+      Eigen::Vector3d Z = (1-t) * X0 + t * X1;
+
+      Eigen::Vector2d z = (proj_matrix * Z.homogeneous()).hnormalized();
+
+      Eigen::Vector3d Z_bp = BackprojectToLine(z, proj_matrix, X0, X1);
+      BOOST_CHECK((Z-Z_bp).norm() < 1e-8);
+  }
+}
+

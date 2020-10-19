@@ -1553,6 +1553,7 @@ int RunPointTriangulator(int argc, char** argv) {
     PrintHeading1(StringPrintf("Triangulating image #%d (%d)", image_id, i));
 
     const size_t num_existing_points3D = image.NumPoints3D();
+    const size_t num_existing_lines3D = image.NumLines3D();
 
     std::cout << "  => Image sees " << num_existing_points3D << " / "
               << image.NumObservations() << " points" << std::endl;
@@ -1560,7 +1561,8 @@ int RunPointTriangulator(int argc, char** argv) {
     mapper.TriangulateImage(tri_options, line_tri_options, image_id);
 
     std::cout << "  => Triangulated "
-              << (image.NumPoints3D() - num_existing_points3D) << " points"
+              << (image.NumPoints3D() - num_existing_points3D) << " points and "
+              << (image.NumLines3D() - num_existing_lines3D) << " lines"
               << std::endl;
   }
 
@@ -1571,6 +1573,33 @@ int RunPointTriangulator(int argc, char** argv) {
   PrintHeading1("Retriangulation");
 
   CompleteAndMergeTracks(mapper_options, &mapper);
+
+
+  // DEBUG
+  PrintHeading1("Debug");
+  for(image_t image_id : reconstruction.RegImageIds()) {
+    const Image &image = reconstruction.Image(image_id);
+    const Camera &camera = reconstruction.Camera(image.CameraId());
+    std::cout << "Image: " << image.Name() << " - " << image.NumLines3D() << " lines.\n";
+    std::cout << "  Rep errors: ";
+    for(const Line2D &line : image.Lines2D()) {
+      if(line.HasLine3D()) {
+        const Line3D &line3d = reconstruction.Line3D(line.Line3DId());
+        double err = CalculateSquaredLineReprojectionError(
+          line.XY1(), line.XY2(), line3d.XYZ1(), line3d.XYZ2(),
+          image.ProjectionMatrix(), camera
+        );
+        double err_ang = CalculateNormalizedLineAngularError(
+          camera.ImageToWorld(line.XY1()), camera.ImageToWorld(line.XY2()), line3d.XYZ1(), line3d.XYZ2(),
+          image.ProjectionMatrix()
+        );
+        std::cout << StringPrintf("%-5.2f px (%-5.6f deg), ", err, RadToDeg(err_ang));
+      }else {
+        std::cout << " FAIL ";
+      }
+    }
+    std::cout << "\n";
+  }
 
   //////////////////////////////////////////////////////////////////////////////
   // Bundle adjustment
@@ -1591,6 +1620,7 @@ int RunPointTriangulator(int argc, char** argv) {
   for (int i = 0; i < mapper_options.ba_global_max_refinements; ++i) {
     // Avoid degeneracies in bundle adjustment.
     reconstruction.FilterObservationsWithNegativeDepth();
+    reconstruction.FilterLineObservationsWithNegativeDepth();
 
     const size_t num_observations = reconstruction.ComputeNumObservations();
 
@@ -1601,6 +1631,7 @@ int RunPointTriangulator(int argc, char** argv) {
     size_t num_changed_observations = 0;
     num_changed_observations += CompleteAndMergeTracks(mapper_options, &mapper);
     num_changed_observations += FilterPoints(mapper_options, &mapper);
+    num_changed_observations += FilterLines(mapper_options, &mapper);
     const double changed =
         static_cast<double>(num_changed_observations) / num_observations;
     std::cout << StringPrintf("  => Changed observations: %.6f", changed)
@@ -1617,6 +1648,34 @@ int RunPointTriangulator(int argc, char** argv) {
   mapper.EndReconstruction(kDiscardReconstruction);
 
   reconstruction.Write(output_path);
+
+
+
+  // DEBUG
+  PrintHeading1("Debug2");
+  for(image_t image_id : reconstruction.RegImageIds()) {
+    const Image &image = reconstruction.Image(image_id);
+    const Camera &camera = reconstruction.Camera(image.CameraId());
+    std::cout << "Image: " << image.Name() << " - " << image.NumLines3D() << " lines.\n";
+    std::cout << "  Rep errors: ";
+    for(const Line2D &line : image.Lines2D()) {
+      if(line.HasLine3D()) {
+        const Line3D &line3d = reconstruction.Line3D(line.Line3DId());
+        double err = CalculateSquaredLineReprojectionError(
+          line.XY1(), line.XY2(), line3d.XYZ1(), line3d.XYZ2(),
+          image.ProjectionMatrix(), camera
+        );
+        double err_ang = CalculateNormalizedLineAngularError(
+          camera.ImageToWorld(line.XY1()), camera.ImageToWorld(line.XY2()), line3d.XYZ1(), line3d.XYZ2(),
+          image.ProjectionMatrix()
+        );
+        std::cout << StringPrintf("%-5.2f px (%-5.6f deg), ", err, RadToDeg(err_ang));
+      } else {
+        std::cout << " FAIL ";
+      }
+    }
+    std::cout << "\n";
+  }
 
   return EXIT_SUCCESS;
 }

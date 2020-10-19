@@ -155,7 +155,7 @@ size_t IncrementalLineTriangulator::CompleteImage(const Options& options,
   // Container for correspondences from reference observation to other images.
   std::vector<CorrData> corrs_data;
 
-  for (point2D_t line2D_idx = 0; line2D_idx < image.NumPoints2D();
+  for (point2D_t line2D_idx = 0; line2D_idx < image.NumLines2D();
        ++line2D_idx) {
     const Line2D& line2D = image.Line2D(line2D_idx);
     if (line2D.HasLine3D()) {
@@ -292,8 +292,7 @@ size_t IncrementalLineTriangulator::MergeAllTracks(const Options& options) {
 size_t IncrementalLineTriangulator::Retriangulate(const Options& options) {
   CHECK(options.Check());
 
-  // TODO: Think if we should support retriangulation for lines
-  /*
+  
   size_t num_tris = 0;
 
   ClearCaches();
@@ -303,12 +302,15 @@ size_t IncrementalLineTriangulator::Retriangulate(const Options& options) {
 
   for (const auto& image_pair : reconstruction_->ImagePairs()) {
     // Only perform retriangulation for under-reconstructed image pairs.
+    
+    /*
     const double tri_ratio =
         static_cast<double>(image_pair.second.num_tri_corrs) /
         static_cast<double>(image_pair.second.num_total_corrs);
     if (tri_ratio >= options.re_min_ratio) {
       continue;
     }
+    */
 
     // Check if images are registered yet.
 
@@ -348,15 +350,15 @@ size_t IncrementalLineTriangulator::Retriangulate(const Options& options) {
                                                                 image_id2);
 
     for (const auto& corr : corrs) {
-      const Point2D& point2D1 = image1.Point2D(corr.point2D_idx1);
-      const Point2D& point2D2 = image2.Point2D(corr.point2D_idx2);
+      const Line2D& line2D1 = image1.Line2D(corr.point2D_idx1);
+      const Line2D& line2D2 = image2.Line2D(corr.point2D_idx2);
 
       // Two cases are possible here: both points belong to the same 3D point
       // or to different 3D points. In the former case, there is nothing
       // to do. In the latter case, we do not attempt retriangulation,
       // as retriangulated correspondences are very likely bogus and
       // would therefore destroy both 3D points if merged.
-      if (point2D1.HasPoint3D() && point2D2.HasPoint3D()) {
+      if (line2D1.HasLine3D() && line2D2.HasLine3D()) {
         continue;
       }
 
@@ -365,22 +367,22 @@ size_t IncrementalLineTriangulator::Retriangulate(const Options& options) {
       corr_data1.line2D_idx = corr.point2D_idx1;
       corr_data1.image = &image1;
       corr_data1.camera = &camera1;
-      corr_data1.line2D = &point2D1;
+      corr_data1.line2D = &line2D1;
 
       CorrData corr_data2;
       corr_data2.image_id = image_id2;
       corr_data2.line2D_idx = corr.point2D_idx2;
       corr_data2.image = &image2;
       corr_data2.camera = &camera2;
-      corr_data2.line2D = &point2D2;
+      corr_data2.line2D = &line2D2;
 
-      if (point2D1.HasPoint3D() && !point2D2.HasPoint3D()) {
+      if (line2D1.HasLine3D() && !line2D2.HasLine3D()) {
         const std::vector<CorrData> corrs_data1 = {corr_data1};
         num_tris += Continue(re_options, corr_data2, corrs_data1);
-      } else if (!point2D1.HasPoint3D() && point2D2.HasPoint3D()) {
+      } else if (!line2D1.HasLine3D() && line2D2.HasLine3D()) {
         const std::vector<CorrData> corrs_data2 = {corr_data2};
         num_tris += Continue(re_options, corr_data1, corrs_data2);
-      } else if (!point2D1.HasPoint3D() && !point2D2.HasPoint3D()) {
+      } else if (!line2D1.HasLine3D() && !line2D2.HasLine3D()) {
         const std::vector<CorrData> corrs_data = {corr_data1, corr_data2};
         // Do not use larger triangulation threshold as this causes
         // significant drift when creating points (options vs. re_options).
@@ -392,8 +394,7 @@ size_t IncrementalLineTriangulator::Retriangulate(const Options& options) {
   }
 
   return num_tris;
-  */
-  return 0;
+  
 }
 
 void IncrementalLineTriangulator::AddModifiedLine3D(const point3D_t line3D_id) {

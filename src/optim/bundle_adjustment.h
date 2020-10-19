@@ -144,17 +144,27 @@ class BundleAdjustmentConfig {
   // Add / remove points from the configuration. Note that points can either
   // be variable or constant but not both at the same time.
   void AddVariablePoint(const point3D_t point3D_id);
-  void AddConstantPoint(const point3D_t point3D_id);
+  void AddConstantPoint(const point3D_t point3D_id);  
   bool HasPoint(const point3D_t point3D_id) const;
   bool HasVariablePoint(const point3D_t point3D_id) const;
   bool HasConstantPoint(const point3D_t point3D_id) const;
   void RemoveVariablePoint(const point3D_t point3D_id);
   void RemoveConstantPoint(const point3D_t point3D_id);
 
+  void AddVariableLine(const point3D_t line3D_id);
+  void AddConstantLine(const point3D_t line3D_id);  
+  bool HasLine(const point3D_t line3D_id) const;
+  bool HasVariableLine(const point3D_t line3D_id) const;
+  bool HasConstantLine(const point3D_t line3D_id) const;
+  void RemoveVariableLine(const point3D_t line3D_id);
+  void RemoveConstantLine(const point3D_t line3D_id);
+
   // Access configuration data.
   const std::unordered_set<image_t>& Images() const;
   const std::unordered_set<point3D_t>& VariablePoints() const;
   const std::unordered_set<point3D_t>& ConstantPoints() const;
+  const std::unordered_set<point3D_t>& VariableLines() const;
+  const std::unordered_set<point3D_t>& ConstantLines() const;
   const std::vector<int>& ConstantTvec(const image_t image_id) const;
 
  private:
@@ -162,6 +172,8 @@ class BundleAdjustmentConfig {
   std::unordered_set<image_t> image_ids_;
   std::unordered_set<point3D_t> variable_point3D_ids_;
   std::unordered_set<point3D_t> constant_point3D_ids_;
+  std::unordered_set<point3D_t> variable_line3D_ids_;
+  std::unordered_set<point3D_t> constant_line3D_ids_;  
   std::unordered_set<image_t> constant_poses_;
   std::unordered_map<image_t, std::vector<int>> constant_tvecs_;
 };
@@ -190,9 +202,14 @@ class BundleAdjuster {
                          Reconstruction* reconstruction,
                          ceres::LossFunction* loss_function);
 
+  void AddLineToProblem(const point3D_t point3D_id,
+                         Reconstruction* reconstruction,
+                         ceres::LossFunction* loss_function);
+
  protected:
   void ParameterizeCameras(Reconstruction* reconstruction);
   void ParameterizePoints(Reconstruction* reconstruction);
+  void ParameterizeLines(Reconstruction* reconstruction);
 
   const BundleAdjustmentOptions options_;
   BundleAdjustmentConfig config_;
@@ -200,6 +217,7 @@ class BundleAdjuster {
   ceres::Solver::Summary summary_;
   std::unordered_set<camera_t> camera_ids_;
   std::unordered_map<point3D_t, size_t> point3D_num_observations_;
+  std::unordered_map<point3D_t, size_t> line3D_num_observations_;
 };
 
 // Bundle adjustment using PBA (GPU or CPU). Less flexible and accurate than

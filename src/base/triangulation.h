@@ -113,6 +113,29 @@ std::vector<double> CalculateTriangulationAngles(
     const Eigen::Vector3d& proj_center1, const Eigen::Vector3d& proj_center2,
     const std::vector<Eigen::Vector3d>& points3D);
 
+
+// Triangulate 3D line from multiple line segments.
+// Calls AdjustLineMultiView on the result
+// 
+//
+// @param proj_matrices       Projection matrices of multi-view observations.
+// @param line_segment        Image observations from multi-views.
+//
+// @return                    Estimated 3D line.
+std::pair<Eigen::Vector3d, Eigen::Vector3d> TriangulateMultiViewLine(
+    const std::vector<Eigen::Matrix3x4d>& proj_matrices,
+    const std::vector<Eigen::Vector2d>& start_points,
+    const std::vector<Eigen::Vector2d>& end_points);
+
+// Ensures that the line segment in 3D corresponds to the hull of the union of 
+// the 2D line segments.
+std::pair<Eigen::Vector3d, Eigen::Vector3d> AdjustLineMultiView(
+    const std::pair<Eigen::Vector3d, Eigen::Vector3d> &line3d, 
+    const std::vector<Eigen::Matrix3x4d>& proj_matrices,
+    const std::vector<Eigen::Vector2d>& start_points,
+    const std::vector<Eigen::Vector2d>& end_points);
+
+
 }  // namespace colmap
 
 #endif  // COLMAP_SRC_BASE_TRIANGULATION_H_

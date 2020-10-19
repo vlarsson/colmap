@@ -210,7 +210,8 @@ class IncrementalMapper {
       const Options& options, const BundleAdjustmentOptions& ba_options,
       const IncrementalTriangulator::Options& tri_options,
       const IncrementalLineTriangulator::Options& line_tri_options,
-      const image_t image_id, const std::unordered_set<point3D_t>& point3D_ids);
+      const image_t image_id, const std::unordered_set<point3D_t>& point3D_ids,
+      const std::unordered_set<point3D_t>& line3D_ids);
 
   // Global bundle adjustment using Ceres Solver or PBA.
   bool AdjustGlobalBundle(const Options& options,
@@ -222,6 +223,7 @@ class IncrementalMapper {
   // Filter images and point observations.
   size_t FilterImages(const Options& options);
   size_t FilterPoints(const Options& options);
+  size_t FilterLines(const Options& options);
 
   const Reconstruction& GetReconstruction() const;
 
@@ -234,9 +236,11 @@ class IncrementalMapper {
 
   // Get changed 3D points, since the last call to `ClearModifiedPoints3D`.
   const std::unordered_set<point3D_t>& GetModifiedPoints3D();
+  const std::unordered_set<point3D_t>& GetModifiedLines3D();
 
   // Clear the collection of changed 3D points.
   void ClearModifiedPoints3D();
+  void ClearModifiedLines3D();
 
  private:
   // Find seed images for incremental reconstruction. Suitable seed images have

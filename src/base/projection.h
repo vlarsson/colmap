@@ -175,6 +175,13 @@ double CalculateNormalizedLineAngularError(
     const Eigen::Vector3d& point3D_1, const Eigen::Vector3d& point3D_2,
     const Eigen::Matrix3x4d& proj_matrix);
 
+
+// Find 3D point on a given 3D line that corresponds to a 2D point in the image
+Eigen::Vector3d BackprojectToLine(
+    const Eigen::Vector2d &point2D, const Eigen::Matrix3x4d &proj_matrix,
+    const Eigen::Vector3d &point3D_1, const Eigen::Vector3d &point3D_2);
+
+
 // Calculate depth of 3D point with respect to camera.
 //
 // The depth is defined as the Euclidean distance of a 3D point from the

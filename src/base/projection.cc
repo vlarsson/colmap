@@ -154,12 +154,18 @@ double CalculateSquaredLineReprojectionError(
     const Eigen::Vector3d& point3D_1, const Eigen::Vector3d& point3D_2,
     const Eigen::Matrix3x4d& proj_matrix, const Camera& camera) {
 
-  const Eigen::Vector3d X1 = proj_matrix * point3D_1.homogeneous();
-  const Eigen::Vector3d X2 = proj_matrix * point3D_2.homogeneous();
+  
+  Eigen::Vector3d X1 = BackprojectToLine(
+    camera.ImageToWorld(point2D_1), proj_matrix, point3D_1, point3D_2
+  );
+  Eigen::Vector3d X2 = BackprojectToLine(
+    camera.ImageToWorld(point2D_2), proj_matrix, point3D_1, point3D_2
+  );
 
-  // Check that point is infront of camera.
-  // TODO: check this not for the 3D points defining the lines, 
-  //       but the points closest to where the segment starts/ends
+  X1 = proj_matrix * X1.homogeneous();
+  X2 = proj_matrix * X2.homogeneous();
+
+  // Check that point is infront of camera.  
   if (X1.z() < std::numeric_limits<double>::epsilon()) {
     return std::numeric_limits<double>::max();
   }
@@ -260,20 +266,12 @@ double CalculateNormalizedLineAngularError(
       const Eigen::Vector3d& point3D_1, const Eigen::Vector3d& point3D_2,
       const Eigen::Matrix3x4d& proj_matrix) {
 
-  const Eigen::Vector3d X1 = proj_matrix * point3D_1.homogeneous();
-  const Eigen::Vector3d X2 = proj_matrix * point3D_2.homogeneous();
-
-  const Eigen::Vector2d x1 = X1.hnormalized();
-  const Eigen::Vector2d x2 = X2.hnormalized();
-
-  // line from projections
-  const Eigen::Vector3d line_proj = x1.homogeneous().cross(x2.homogeneous());
-  // observed line segment
-  const Eigen::Vector3d line_obs = point2D_1.homogeneous().cross(
-        point2D_2.homogeneous());
-
-  // compute angle between normals  
-  return std::acos(std::abs(line_proj.normalized().transpose() * line_obs.normalized()));
+  // Find closest points on line
+  Eigen::Vector3d X1 = BackprojectToLine(point2D_1, proj_matrix, point3D_1, point3D_2);
+  Eigen::Vector3d X2 = BackprojectToLine(point2D_2, proj_matrix, point3D_1, point3D_2);
+  // Compute normal angular error to these
+  return (CalculateNormalizedAngularError(point2D_1, X1, proj_matrix) + 
+          CalculateNormalizedAngularError(point2D_2, X2, proj_matrix));  
 }
 
 double CalculateDepth(const Eigen::Matrix3x4d& proj_matrix,
@@ -286,6 +284,23 @@ bool HasPointPositiveDepth(const Eigen::Matrix3x4d& proj_matrix,
                            const Eigen::Vector3d& point3D) {
   return proj_matrix.row(2).dot(point3D.homogeneous()) >=
          std::numeric_limits<double>::epsilon();
+}
+
+
+Eigen::Vector3d BackprojectToLine(
+    const Eigen::Vector2d &point2D, const Eigen::Matrix3x4d &proj_matrix,
+    const Eigen::Vector3d &point3D_1, const Eigen::Vector3d &point3D_2)
+{
+  // Write line as X0 + t * X1
+  Eigen::Vector3d X0 = proj_matrix * point3D_1.homogeneous();
+  Eigen::Vector3d X1 = proj_matrix * point3D_2.homogeneous() - X0;
+    
+  Eigen::Matrix<double,3,2> M;
+  M << X1, -point2D.homogeneous();
+
+  Eigen::Vector2d z = M.colPivHouseholderQr().solve(-X0);
+
+  return point3D_1 + z(0) * (point3D_2 - point3D_1);  
 }
 
 }  // namespace colmap

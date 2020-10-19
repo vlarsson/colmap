@@ -180,4 +180,104 @@ std::vector<double> CalculateTriangulationAngles(
   return angles;
 }
 
+
+// Triangulate 3D line from multiple line segments.
+// Calls AdjustLineMultiView on the result
+// 
+//
+// @param proj_matrices       Projection matrices of multi-view observations.
+// @param line_segment        Image observations from multi-views.
+//
+// @return                    Estimated 3D line.
+std::pair<Eigen::Vector3d, Eigen::Vector3d> TriangulateMultiViewLine(
+    const std::vector<Eigen::Matrix3x4d>& proj_matrices,
+    const std::vector<Eigen::Vector2d>& points1,
+    const std::vector<Eigen::Vector2d>& points2) {
+
+
+  CHECK_EQ(proj_matrices.size(), points1.size());
+  CHECK_EQ(points1.size(), points2.size());
+
+  Eigen::Matrix4d A;
+  A.setZero();
+
+  for(size_t i = 0; i < proj_matrices.size(); ++i) {
+
+    Eigen::Vector3d line2d = points1[i].homogeneous().cross(points2[i].homogeneous()).normalized();
+
+    // backprojected plane
+    Eigen::Vector4d p = proj_matrices[i].transpose() * line2d;
+    p = p / p.topRows<3>().norm();
+    A +=  p * p.transpose();
+  }
+
+  Eigen::SelfAdjointEigenSolver<Eigen::Matrix4d> eigen_solver(A);
+  Eigen::Matrix<double, 4, 2> basis = eigen_solver.eigenvectors().leftCols<2>();
+  
+  // transform basis such that the line is represented
+  //    X(lambda) = X0 + lambda * X1
+
+  Eigen::Matrix2d H;
+  H << basis(3,0), basis(3,1),
+       basis(3,1),-basis(3,0);
+  basis = basis * H;
+
+  Eigen::Vector3d X0, X1;
+  X0 = basis.block<3,1>(0,0) / basis(3,0);
+  X1 = X0 + basis.block<3,1>(0,1).normalized();
+
+  std::pair<Eigen::Vector3d, Eigen::Vector3d> xyz = 
+    AdjustLineMultiView(std::make_pair(X0,X1), proj_matrices, points1, points2);
+
+  return xyz;
+}
+
+// Ensures that the line segment in 3D corresponds to the hull of the union of 
+// the 2D line segments.
+std::pair<Eigen::Vector3d, Eigen::Vector3d> AdjustLineMultiView(
+    const std::pair<Eigen::Vector3d, Eigen::Vector3d> &line3d, 
+    const std::vector<Eigen::Matrix3x4d>& proj_matrices,
+    const std::vector<Eigen::Vector2d>& points1,
+    const std::vector<Eigen::Vector2d>& points2) {
+
+  CHECK_EQ(proj_matrices.size(), points1.size());
+  CHECK_EQ(points1.size(), points2.size());
+
+  // Write line as X0 + t * X1
+  Eigen::Vector3d X0 = line3d.first;
+  Eigen::Vector3d X1 = line3d.second - X0;
+    
+  // compute closest point on the line for each line segment endpoint
+  std::vector<double> parameter_values;
+  parameter_values.reserve(2*proj_matrices.size());
+  for(size_t i = 0; i < proj_matrices.size(); ++i) {
+
+
+    // Transform X0 and X1 into the target frame
+    // Note that X1 is a direction here and is just rotated
+    Eigen::Vector3d Z0 = proj_matrices[i] * X0.homogeneous();
+    Eigen::Vector3d Z1 = proj_matrices[i].leftCols<3>() * X1;
+
+    // Z0 + t * Z0 = lambda * x
+
+    Eigen::Matrix<double,3,2> M;
+    M << Z1, -points1[i].homogeneous();
+
+    Eigen::Vector2d z = M.colPivHouseholderQr().solve(-Z0);
+    parameter_values.push_back(z(0));
+
+    M.col(1) = -points2[i].homogeneous();
+    z = M.colPivHouseholderQr().solve(-Z0);
+    parameter_values.push_back(z(0));
+  }
+
+  auto mm = std::minmax_element(parameter_values.begin(), parameter_values.end());
+  
+  // We take the maximum and minimum parameter values as the line end points
+  Eigen::Vector3d line_point1 = X0 + X1 * (*mm.first);
+  Eigen::Vector3d line_point2 = X0 + X1 * (*mm.second);
+
+  return std::make_pair(line_point1, line_point2);
+}
+
 }  // namespace colmap
