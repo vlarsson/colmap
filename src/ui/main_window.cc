@@ -519,7 +519,7 @@ void MainWindow::CreateStatusbar() {
   statusbar_timer_->start(1000);
 
   model_viewer_widget_->statusbar_status_label =
-      new QLabel("0 Images - 0 Points", this);
+      new QLabel("0 Images - 0 Points - 0 Lines", this);
   model_viewer_widget_->statusbar_status_label->setFont(font);
   model_viewer_widget_->statusbar_status_label->setAlignment(Qt::AlignCenter);
   statusBar()->addWidget(model_viewer_widget_->statusbar_status_label, 1);

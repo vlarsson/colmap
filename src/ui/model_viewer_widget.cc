@@ -285,8 +285,8 @@ void ModelViewerWidget::ReloadReconstruction() {
   }
 
   statusbar_status_label->setText(QString().sprintf(
-      "%d Images - %d Points", static_cast<int>(reg_image_ids.size()),
-      static_cast<int>(points3D.size())));
+      "%d Images - %d Points - %d Lines", static_cast<int>(reg_image_ids.size()),
+      static_cast<int>(points3D.size()),static_cast<int>(lines3D.size())));
 
   Upload();
 }
@@ -831,8 +831,7 @@ void ModelViewerWidget::UploadPointConnectionData() {
       static_cast<size_t>(options_->render->min_track_len);
 
   for (const auto& line3D : lines3D) {
-    if (line3D.second.Error() <= options_->render->max_error &&
-        line3D.second.Track().Length() >= min_track_len) {
+    if (line3D.second.Track().Length() >= min_track_len) {
       LinePainter::Data painter_line;
 
 

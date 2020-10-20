@@ -64,8 +64,10 @@ class Reconstruction {
   struct ImagePairStat {
     // The number of triangulated correspondences between two images.
     size_t num_tri_corrs = 0;
+    size_t num_tri_line_corrs = 0;
     // The number of total correspondences/matches between two images.
     size_t num_total_corrs = 0;
+    size_t num_total_line_corrs = 0;
   };
 
   Reconstruction();
@@ -75,6 +77,7 @@ class Reconstruction {
   inline size_t NumImages() const;
   inline size_t NumRegImages() const;
   inline size_t NumPoints3D() const;
+  inline size_t NumLines3D() const;
   inline size_t NumImagePairs() const;
 
   // Get const objects.
@@ -325,26 +328,34 @@ class Reconstruction {
   size_t FilterPoints3DWithSmallTriangulationAngle(
       const double min_tri_angle,
       const std::unordered_set<point3D_t>& point3D_ids);
+  size_t FilterLines3DWithSmallTriangulationAngle(
+      const double min_tri_angle,
+      const std::unordered_set<point3D_t>& line3D_ids);
   size_t FilterPoints3DWithLargeReprojectionError(
       const double max_reproj_error,
       const std::unordered_set<point3D_t>& point3D_ids);
   size_t FilterLines3DWithLargeReprojectionError(
       const double max_reproj_error,
-      const std::unordered_set<point3D_t>& point3D_ids);
+      const std::unordered_set<point3D_t>& line3D_ids);
 
   void ReadCamerasText(const std::string& path);
   void ReadImagesText(const std::string& path);
-  void ReadPoints3DText(const std::string& path);
+  void ReadPoints3DText(const std::string& path);  
   void ReadCamerasBinary(const std::string& path);
   void ReadImagesBinary(const std::string& path);
   void ReadPoints3DBinary(const std::string& path);
+  void ReadLines2DBinary(const std::string& path);
+  void ReadLines3DBinary(const std::string& path);
 
   void WriteCamerasText(const std::string& path) const;
   void WriteImagesText(const std::string& path) const;
-  void WritePoints3DText(const std::string& path) const;
+  void WritePoints3DText(const std::string& path) const; 
+
   void WriteCamerasBinary(const std::string& path) const;
   void WriteImagesBinary(const std::string& path) const;
   void WritePoints3DBinary(const std::string& path) const;
+  void WriteLines2DBinary(const std::string& path) const;
+  void WriteLines3DBinary(const std::string& path) const;
 
   void SetObservationAsTriangulated(const image_t image_id,
                                     const point2D_t point2D_idx,
@@ -387,6 +398,8 @@ size_t Reconstruction::NumImages() const { return images_.size(); }
 size_t Reconstruction::NumRegImages() const { return reg_image_ids_.size(); }
 
 size_t Reconstruction::NumPoints3D() const { return points3D_.size(); }
+
+size_t Reconstruction::NumLines3D() const { return lines3D_.size(); }
 
 size_t Reconstruction::NumImagePairs() const {
   return image_pair_stats_.size();

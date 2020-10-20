@@ -60,6 +60,7 @@ void ReconstructionStatsWidget::Show(const Reconstruction& reconstruction) {
   AddStatistic("Registered images",
                QString::number(reconstruction.NumRegImages()));
   AddStatistic("Points", QString::number(reconstruction.NumPoints3D()));
+  AddStatistic("Lines", QString::number(reconstruction.NumLines3D()));
   AddStatistic("Observations",
                QString::number(reconstruction.ComputeNumObservations()));
   AddStatistic("Mean track length",

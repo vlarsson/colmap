@@ -118,6 +118,12 @@ void Reconstruction::Load(const DatabaseCache& database_cache) {
     image_pair_stat.num_total_corrs = image_pair.second;
     image_pair_stats_.emplace(image_pair.first, image_pair_stat);
   }
+
+  // Update for line correspondences as well
+  for (const auto& image_pair :
+       database_cache.LineCorrespondenceGraph().NumCorrespondencesBetweenImages()) {
+    image_pair_stats_[image_pair.first].num_total_line_corrs = image_pair.second;    
+  }
 }
 
 void Reconstruction::SetUp(const CorrespondenceGraph* correspondence_graph) {
@@ -887,7 +893,8 @@ size_t Reconstruction::FilterAllLines3D(const double max_reproj_error,
   size_t num_filtered = 0;
   num_filtered +=
       FilterLines3DWithLargeReprojectionError(max_reproj_error, line3D_ids);
-  // TODO: figure out a good filter to triangulation angle of lines
+ num_filtered +=
+      FilterLines3DWithSmallTriangulationAngle(min_tri_angle, line3D_ids);
   return num_filtered;
 }
 
@@ -1031,6 +1038,8 @@ void Reconstruction::ReadBinary(const std::string& path) {
   ReadCamerasBinary(JoinPaths(path, "cameras.bin"));
   ReadImagesBinary(JoinPaths(path, "images.bin"));
   ReadPoints3DBinary(JoinPaths(path, "points3D.bin"));
+  ReadLines3DBinary(JoinPaths(path, "lines3D.bin"));
+  ReadLines2DBinary(JoinPaths(path, "lines2D.bin"));
 }
 
 void Reconstruction::WriteText(const std::string& path) const {
@@ -1043,6 +1052,8 @@ void Reconstruction::WriteBinary(const std::string& path) const {
   WriteCamerasBinary(JoinPaths(path, "cameras.bin"));
   WriteImagesBinary(JoinPaths(path, "images.bin"));
   WritePoints3DBinary(JoinPaths(path, "points3D.bin"));
+  WriteLines3DBinary(JoinPaths(path, "lines3D.bin"));
+  WriteLines2DBinary(JoinPaths(path, "lines2D.bin"));
 }
 
 std::vector<PlyPoint> Reconstruction::ConvertToPLY() const {
@@ -1551,6 +1562,70 @@ size_t Reconstruction::FilterPoints3DWithSmallTriangulationAngle(
   return num_filtered;
 }
 
+
+
+size_t Reconstruction::FilterLines3DWithSmallTriangulationAngle(
+    const double min_tri_angle,
+    const std::unordered_set<point3D_t>& line3D_ids) {
+  // Number of filtered points.
+  size_t num_filtered = 0;
+
+  // Minimum triangulation angle in radians.
+  const double min_tri_angle_rad = DegToRad(min_tri_angle);
+
+  // Cache for image projection centers.
+  EIGEN_STL_UMAP(image_t, Eigen::Vector3d) proj_centers;
+
+  for (const auto line3D_id : line3D_ids) {
+    if (!ExistsLine3D(line3D_id)) {
+      continue;
+    }
+
+    const class Line3D& line3D = Line3D(line3D_id);
+
+    // Calculate triangulation angle for all pairwise combinations of image
+    // poses in the track. Only delete point if none of the combinations
+    // has a sufficient triangulation angle.
+    bool keep_point = false;
+    for (size_t i1 = 0; i1 < line3D.Track().Length(); ++i1) {
+      const image_t image_id1 = line3D.Track().Element(i1).image_id;
+
+      Eigen::Vector3d proj_center1;
+      if (proj_centers.count(image_id1) == 0) {
+        const class Image& image1 = Image(image_id1);
+        proj_center1 = image1.ProjectionCenter();
+        proj_centers.emplace(image_id1, proj_center1);
+      } else {
+        proj_center1 = proj_centers.at(image_id1);
+      }
+
+      for (size_t i2 = 0; i2 < i1; ++i2) {
+        const image_t image_id2 = line3D.Track().Element(i2).image_id;
+        const Eigen::Vector3d proj_center2 = proj_centers.at(image_id2);
+
+        const double tri_angle = CalculateLineTriangulationAngle(
+            proj_center1, proj_center2, {line3D.XYZ1(), line3D.XYZ2()});
+
+        if (tri_angle >= min_tri_angle_rad) {
+          keep_point = true;
+          break;
+        }
+      }
+
+      if (keep_point) {
+        break;
+      }
+    }
+
+    if (!keep_point) {
+      num_filtered += 1;
+      DeleteLine3D(line3D_id);
+    }
+  }
+
+  return num_filtered;
+}
+
 size_t Reconstruction::FilterPoints3DWithLargeReprojectionError(
     const double max_reproj_error,
     const std::unordered_set<point3D_t>& point3D_ids) {
@@ -1998,6 +2073,80 @@ void Reconstruction::ReadPoints3DBinary(const std::string& path) {
   }
 }
 
+
+void Reconstruction::ReadLines3DBinary(const std::string& path) {
+  std::ifstream file(path, std::ios::binary);
+  CHECK(file.is_open()) << path;
+
+  const size_t num_lines3D = ReadBinaryLittleEndian<uint64_t>(&file);
+  for (size_t i = 0; i < num_lines3D; ++i) {
+    class Line3D line3D;
+
+    const point3D_t line3D_id = ReadBinaryLittleEndian<point3D_t>(&file);
+    num_added_lines3D_ = std::max(num_added_lines3D_, line3D_id);
+
+    line3D.XYZ1()(0) = ReadBinaryLittleEndian<double>(&file);
+    line3D.XYZ1()(1) = ReadBinaryLittleEndian<double>(&file);
+    line3D.XYZ1()(2) = ReadBinaryLittleEndian<double>(&file);
+    line3D.XYZ2()(0) = ReadBinaryLittleEndian<double>(&file);
+    line3D.XYZ2()(1) = ReadBinaryLittleEndian<double>(&file);
+    line3D.XYZ2()(2) = ReadBinaryLittleEndian<double>(&file);
+    line3D.Color(0) = ReadBinaryLittleEndian<uint8_t>(&file);
+    line3D.Color(1) = ReadBinaryLittleEndian<uint8_t>(&file);
+    line3D.Color(2) = ReadBinaryLittleEndian<uint8_t>(&file);
+    line3D.SetError(ReadBinaryLittleEndian<double>(&file));
+
+    const size_t track_length = ReadBinaryLittleEndian<uint64_t>(&file);
+    std::cout << StringPrintf("Reconstruction::ReadLines3DBinary: Line3D(%d) has %d observations.\n", line3D_id, track_length);
+
+    for (size_t j = 0; j < track_length; ++j) {
+      const image_t image_id = ReadBinaryLittleEndian<image_t>(&file);
+      const point2D_t line2D_idx = ReadBinaryLittleEndian<point2D_t>(&file);
+      line3D.Track().AddElement(image_id, line2D_idx);
+    }
+    line3D.Track().Compress();
+
+    lines3D_.emplace(line3D_id, line3D);
+  }
+  std::cout << StringPrintf("Reconstruction::ReadLines3DBinary: Read %d lines.\n", num_lines3D);
+}
+
+
+void Reconstruction::ReadLines2DBinary(const std::string& path) {
+  std::ifstream file(path, std::ios::binary);
+  CHECK(file.is_open()) << path;
+  
+  // Warning! Make sure ReadImagesBinary has been called before this!
+
+  const size_t num_reg_images = ReadBinaryLittleEndian<uint64_t>(&file);
+  for (size_t i = 0; i < num_reg_images; ++i) {
+
+    class Image &image = Image(ReadBinaryLittleEndian<image_t>(&file));
+    
+    const size_t num_lines2D = ReadBinaryLittleEndian<uint64_t>(&file);
+
+    std::vector<Line2D> lines2D;
+    lines2D.reserve(num_lines2D);
+    std::vector<point3D_t> line3D_ids;
+    line3D_ids.reserve(num_lines2D);
+    for (size_t j = 0; j < num_lines2D; ++j) {
+      const double x1 = ReadBinaryLittleEndian<double>(&file);
+      const double y1 = ReadBinaryLittleEndian<double>(&file);
+      const double x2 = ReadBinaryLittleEndian<double>(&file);
+      const double y2 = ReadBinaryLittleEndian<double>(&file);
+
+      Line2D line;
+      line.SetXY(Eigen::Vector2d(x1,y1), Eigen::Vector2d(x2,y2));
+      line.SetLine3DId(ReadBinaryLittleEndian<point3D_t>(&file));
+
+      lines2D.push_back(line);
+    }
+
+    image.SetLines2D(lines2D);        
+  }
+}
+
+
 void Reconstruction::WriteCamerasText(const std::string& path) const {
   std::ofstream file(path, std::ios::trunc);
   CHECK(file.is_open()) << path;
@@ -2208,6 +2357,58 @@ void Reconstruction::WritePoints3DBinary(const std::string& path) const {
   }
 }
 
+void Reconstruction::WriteLines3DBinary(const std::string& path) const {
+  std::ofstream file(path, std::ios::trunc | std::ios::binary);
+  CHECK(file.is_open()) << path;
+
+  WriteBinaryLittleEndian<uint64_t>(&file, lines3D_.size());
+
+  for (const auto& line3D : lines3D_) {
+    WriteBinaryLittleEndian<point3D_t>(&file, line3D.first);
+    WriteBinaryLittleEndian<double>(&file, line3D.second.XYZ1()(0));
+    WriteBinaryLittleEndian<double>(&file, line3D.second.XYZ1()(1));
+    WriteBinaryLittleEndian<double>(&file, line3D.second.XYZ1()(2));
+    WriteBinaryLittleEndian<double>(&file, line3D.second.XYZ2()(0));
+    WriteBinaryLittleEndian<double>(&file, line3D.second.XYZ2()(1));
+    WriteBinaryLittleEndian<double>(&file, line3D.second.XYZ2()(2));
+    WriteBinaryLittleEndian<uint8_t>(&file, line3D.second.Color(0));
+    WriteBinaryLittleEndian<uint8_t>(&file, line3D.second.Color(1));
+    WriteBinaryLittleEndian<uint8_t>(&file, line3D.second.Color(2));
+    WriteBinaryLittleEndian<double>(&file, line3D.second.Error());
+
+    WriteBinaryLittleEndian<uint64_t>(&file, line3D.second.Track().Length());
+    for (const auto& track_el : line3D.second.Track().Elements()) {
+      WriteBinaryLittleEndian<image_t>(&file, track_el.image_id);
+      WriteBinaryLittleEndian<point2D_t>(&file, track_el.point2D_idx);
+    }
+  }
+}
+
+
+void Reconstruction::WriteLines2DBinary(const std::string& path) const {
+  std::ofstream file(path, std::ios::trunc | std::ios::binary);
+  CHECK(file.is_open()) << path;
+
+  WriteBinaryLittleEndian<uint64_t>(&file, reg_image_ids_.size());
+
+  for (const auto& image : images_) {
+    if (!image.second.IsRegistered()) {
+      continue;
+    }
+
+    WriteBinaryLittleEndian<image_t>(&file, image.first);
+    
+    WriteBinaryLittleEndian<uint64_t>(&file, image.second.NumLines2D());
+    for (const Line2D& line2D : image.second.Lines2D()) {
+      WriteBinaryLittleEndian<double>(&file, line2D.X1());
+      WriteBinaryLittleEndian<double>(&file, line2D.Y1());
+      WriteBinaryLittleEndian<double>(&file, line2D.X2());
+      WriteBinaryLittleEndian<double>(&file, line2D.Y2());
+      WriteBinaryLittleEndian<point3D_t>(&file, line2D.Line3DId());
+    }
+  }
+}
+
 void Reconstruction::SetObservationAsTriangulated(
     const image_t image_id, const point2D_t point2D_idx,
     const bool is_continued_point3D) {
@@ -2259,24 +2460,23 @@ void Reconstruction::SetLineObservationAsTriangulated(
 
   for (const auto& corr : corrs) {
     class Image& corr_image = Image(corr.image_id);
+    const Line2D& corr_line2D = corr_image.Line2D(corr.point2D_idx);
+
     corr_image.IncrementCorrespondenceHasLine3D(corr.point2D_idx);
 
-    // TODO: Do we really need this for lines as well?
-    //       Figure out what this is actually used for...
-    /*
+    
     // Update number of shared 3D points between image pairs and make sure to
     // only count the correspondences once (not twice forward and backward).
-    if (point2D.Point3DId() == corr_point2D.Point3DId() &&
+    if (line2D.Line3DId() == corr_line2D.Line3DId() &&
         (is_continued_point3D || image_id < corr.image_id)) {
       const image_pair_t pair_id =
           Database::ImagePairToPairId(image_id, corr.image_id);
-      image_pair_stats_[pair_id].num_tri_corrs += 1;
-      CHECK_LE(image_pair_stats_[pair_id].num_tri_corrs,
-               image_pair_stats_[pair_id].num_total_corrs)
+      image_pair_stats_[pair_id].num_tri_line_corrs += 1;
+      CHECK_LE(image_pair_stats_[pair_id].num_tri_line_corrs,
+               image_pair_stats_[pair_id].num_total_line_corrs)
           << "The correspondence graph graph must not contain duplicate "
              "matches";
     }
-    */
   }
 }
 
@@ -2331,20 +2531,22 @@ void Reconstruction::ResetTriLineObservations(const image_t image_id,
 
   for (const auto& corr : corrs) {
     class Image& corr_image = Image(corr.image_id);
+    const Line2D& corr_line2D = corr_image.Line2D(corr.point2D_idx);
+
     corr_image.DecrementCorrespondenceHasLine3D(corr.point2D_idx);
     
-    /*
+
     // Update number of shared 3D points between image pairs and make sure to
     // only count the correspondences once (not twice forward and backward).
-    if (point2D.Point3DId() == corr_point2D.Point3DId() &&
-        (!is_deleted_point3D || image_id < corr.image_id)) {
+    if (line2D.Line3DId() == corr_line2D.Line3DId() &&
+        (!is_deleted_line3D || image_id < corr.image_id)) {
       const image_pair_t pair_id =
           Database::ImagePairToPairId(image_id, corr.image_id);
-      image_pair_stats_[pair_id].num_tri_corrs -= 1;
+      image_pair_stats_[pair_id].num_tri_line_corrs -= 1;
       CHECK_GE(image_pair_stats_[pair_id].num_tri_corrs, 0)
           << "The scene graph graph must not contain duplicate matches";
     }
-    */
+  
   }
 }
 

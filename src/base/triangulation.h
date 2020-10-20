@@ -113,6 +113,14 @@ std::vector<double> CalculateTriangulationAngles(
     const Eigen::Vector3d& proj_center1, const Eigen::Vector3d& proj_center2,
     const std::vector<Eigen::Vector3d>& points3D);
 
+// Calculate angle in radians between the two rays of a triangulated line.
+double CalculateLineTriangulationAngle(const Eigen::Vector3d& proj_center1,
+                                   const Eigen::Vector3d& proj_center2,
+                                   const std::pair<Eigen::Vector3d, Eigen::Vector3d>& line3D);
+std::vector<double> CalculateLineTriangulationAngles(
+    const Eigen::Vector3d& proj_center1, const Eigen::Vector3d& proj_center2,
+    const std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>>& lines3D);
+
 
 // Triangulate 3D line from multiple line segments.
 // Calls AdjustLineMultiView on the result

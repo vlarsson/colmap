@@ -819,7 +819,7 @@ size_t IncrementalMapper::FilterPoints(const Options& options) {
 size_t IncrementalMapper::FilterLines(const Options& options) {
   CHECK_NOTNULL(reconstruction_);
   CHECK(options.Check());
-  return reconstruction_->FilterAllLines3D(options.filter_max_reproj_error,
+  return reconstruction_->FilterAllLines3D(options.filter_max_line_reproj_error,
                                             options.filter_min_tri_angle);
 }
 

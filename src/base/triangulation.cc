@@ -181,6 +181,44 @@ std::vector<double> CalculateTriangulationAngles(
 }
 
 
+
+// Calculate angle in radians between the two rays of a triangulated line.
+double CalculateLineTriangulationAngle(const Eigen::Vector3d& proj_center1,
+                                   const Eigen::Vector3d& proj_center2,
+                                   const std::pair<Eigen::Vector3d, Eigen::Vector3d>& line3D) {
+
+  Eigen::Vector3d ray1 = line3D.first - proj_center1;
+  Eigen::Vector3d ray2 = line3D.first - proj_center2;
+
+  // Remove component parallel to the line
+  Eigen::Vector3d v = (line3D.first - line3D.second).normalized();
+  ray1 = ray1 - v.dot(ray1) * v;
+  ray2 = ray2 - v.dot(ray2) * v;
+
+  // these are now the vectors that are orthogonal to the line and go to the projection centers
+  // compute the angle between these
+  const double cos_angle = std::max(-1.0,std::min(1.0, ray1.normalized().dot(ray2.normalized())));
+  const double angle = std::abs(std::acos(cos_angle));
+  // Triangulation is unstable for acute angles (far away points) and
+  // obtuse angles (close points), so always compute the minimum angle
+  // between the two intersecting rays.
+  return std::min(angle, M_PI - angle);
+}
+
+
+std::vector<double> CalculateLineTriangulationAngles(
+    const Eigen::Vector3d& proj_center1, const Eigen::Vector3d& proj_center2,
+    const std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>>& lines3D) {
+      
+  std::vector<double> angles(lines3D.size());
+  for(size_t i = 0; i < lines3D.size(); ++i) {
+    angles[i] = CalculateLineTriangulationAngle(proj_center1, proj_center2, lines3D[i]);
+  }
+
+  return angles;
+}
+
+
 // Triangulate 3D line from multiple line segments.
 // Calls AdjustLineMultiView on the result
 // 
@@ -258,7 +296,8 @@ std::pair<Eigen::Vector3d, Eigen::Vector3d> AdjustLineMultiView(
     Eigen::Vector3d Z0 = proj_matrices[i] * X0.homogeneous();
     Eigen::Vector3d Z1 = proj_matrices[i].leftCols<3>() * X1;
 
-    // Z0 + t * Z0 = lambda * x
+    // Z0 + t * Z1 = lambda * x
+    // [Z1 -x] * [t; -lambda] = -Z0
 
     Eigen::Matrix<double,3,2> M;
     M << Z1, -points1[i].homogeneous();

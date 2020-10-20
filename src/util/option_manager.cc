@@ -553,6 +553,8 @@ void OptionManager::AddMapperOptions() {
                               &mapper->mapper.abs_pose_min_inlier_ratio);
   AddAndRegisterDefaultOption("Mapper.filter_max_reproj_error",
                               &mapper->mapper.filter_max_reproj_error);
+  AddAndRegisterDefaultOption("Mapper.filter_max_line_reproj_error",
+                              &mapper->mapper.filter_max_line_reproj_error);
   AddAndRegisterDefaultOption("Mapper.filter_min_tri_angle",
                               &mapper->mapper.filter_min_tri_angle);
   AddAndRegisterDefaultOption("Mapper.max_reg_trials",

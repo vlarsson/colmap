@@ -1676,6 +1676,7 @@ int RunPointTriangulator(int argc, char** argv) {
     }
     std::cout << "\n";
   }
+  std::cout << "Reconstruction contains " << reconstruction.NumLines3D() << " lines.\n";
 
   return EXIT_SUCCESS;
 }

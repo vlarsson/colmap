@@ -208,6 +208,8 @@ size_t IncrementalLineTriangulator::CompleteImage(const Options& options,
     // Estimate triangulation.
     std::pair<Eigen::Vector3d, Eigen::Vector3d> xyz;
     std::vector<char> inlier_mask;
+    std::cout << "CompleteImage: calling EstimateLineTriangulation with " << line_data.size() << " lines obs.\n";
+
     if (!EstimateLineTriangulation(tri_options, line_data, pose_data, &inlier_mask,
                                &xyz)) {
       continue;
@@ -223,6 +225,9 @@ size_t IncrementalLineTriangulator::CompleteImage(const Options& options,
         num_tris += 1;
       }
     }
+
+    std::cout << "CompleteImage: got  " << track.Length() << " inliers.\n";
+
 
     const point3D_t line3D_id = reconstruction_->AddLine3D(xyz.first, xyz.second, track);
     modified_line3D_ids_.insert(line3D_id);
@@ -303,14 +308,14 @@ size_t IncrementalLineTriangulator::Retriangulate(const Options& options) {
   for (const auto& image_pair : reconstruction_->ImagePairs()) {
     // Only perform retriangulation for under-reconstructed image pairs.
     
-    /*
+    
     const double tri_ratio =
         static_cast<double>(image_pair.second.num_tri_corrs) /
         static_cast<double>(image_pair.second.num_total_corrs);
     if (tri_ratio >= options.re_min_ratio) {
       continue;
     }
-    */
+    
 
     // Check if images are registered yet.
 
@@ -526,10 +531,13 @@ size_t IncrementalLineTriangulator::Create(
   // Estimate triangulation.
   std::pair<Eigen::Vector3d, Eigen::Vector3d> xyz;
   std::vector<char> inlier_mask;
+  std::cout << "Create: calling EstimateLineTriangulation with " << line_data.size() << " lines obs.\n";
   if (!EstimateLineTriangulation(tri_options, line_data, pose_data, &inlier_mask,
                              &xyz)) {
     return 0;
   }
+
+  
 
   // Add inliers to estimated track.
   Track track;
@@ -540,6 +548,8 @@ size_t IncrementalLineTriangulator::Create(
       track.AddElement(corr_data.image_id, corr_data.line2D_idx);
     }
   }
+
+  std::cout << "Create: got  " << track.Length() << " inliers.\n";
 
   // Add estimated point to reconstruction.
   const point3D_t line3D_id = reconstruction_->AddLine3D(xyz.first, xyz.second, track);
@@ -590,8 +600,13 @@ size_t IncrementalLineTriangulator::Continue(
     const TrackElement track_el(ref_corr_data.image_id,
                                 ref_corr_data.line2D_idx);
     reconstruction_->AddLineObservation(corr_data.line2D->Line3DId(), track_el);
+
+    std::cout << "Continue: accepted line with angular error " << best_angle_error << " deg\n"; 
+
     modified_line3D_ids_.insert(corr_data.line2D->Line3DId());
     return 1;
+  } else {
+    std::cout << "Continue: rejected line with angular error " << best_angle_error << " deg\n";
   }
 
   return 0;
@@ -737,7 +752,15 @@ size_t IncrementalLineTriangulator::Complete(const Options& options,
         if (CalculateSquaredLineReprojectionError(
                 line2D.XY1(), line2D.XY2(), line3D.XYZ1(), line3D.XYZ2(),
                 image.Qvec(), image.Tvec(), camera) > max_squared_reproj_error) {
+
+          std::cout << "CompleteImage: skipping line corr due to error = " << CalculateSquaredLineReprojectionError(
+                line2D.XY1(), line2D.XY2(), line3D.XYZ1(), line3D.XYZ2(),
+                image.Qvec(), image.Tvec(), camera) << " px." << std::endl;
           continue;
+        } else {
+          std::cout << "CompleteImage: accepted line with " << CalculateSquaredLineReprojectionError(
+                line2D.XY1(), line2D.XY2(), line3D.XYZ1(), line3D.XYZ2(),
+                image.Qvec(), image.Tvec(), camera) << " px error." << std::endl;
         }
 
         // Success, add observation to point track.

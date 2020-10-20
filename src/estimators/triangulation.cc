@@ -208,21 +208,18 @@ std::vector<LineTriangulationEstimator::M_t> LineTriangulationEstimator::Estimat
     }
   }
 
-  // TODO think about how to define triangulation angle here...
-  /*
   // Check for sufficient triangulation angle.
   for (size_t i = 0; i < pose_data.size(); ++i) {
     for (size_t j = 0; j < i; ++j) {
-      const double tri_angle = CalculateTriangulationAngle(
+      const double tri_angle = CalculateLineTriangulationAngle(
           pose_data[i].proj_center, pose_data[j].proj_center, xyz);
       if (tri_angle >= min_tri_angle_) {
         return std::vector<M_t>{xyz};
       }
     }
   }
-  */
 
-  return {xyz};
+  return std::vector<M_t>();
 }
 
 void LineTriangulationEstimator::Residuals(const std::vector<X_t>& line_data,

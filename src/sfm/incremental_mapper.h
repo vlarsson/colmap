@@ -110,6 +110,7 @@ class IncrementalMapper {
 
     // Maximum reprojection error in pixels for observations.
     double filter_max_reproj_error = 4.0;
+    double filter_max_line_reproj_error = 25.0;
 
     // Minimum triangulation angle in degrees for stable 3D points.
     double filter_min_tri_angle = 1.5;
