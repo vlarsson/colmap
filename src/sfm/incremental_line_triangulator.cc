@@ -617,17 +617,17 @@ size_t IncrementalLineTriangulator::Merge(const Options& options,
   if (!reconstruction_->ExistsLine3D(line3D_id)) {
     return 0;
   }
-  // TODO need a meaningful way to merge two lines before we can have this
-  /*
+  
+  
   const double max_squared_reproj_error =
       options.merge_max_reproj_error * options.merge_max_reproj_error;
 
-  const auto& point3D = reconstruction_->Point3D(line3D_id);
+  const auto& line3D = reconstruction_->Line3D(line3D_id);
 
-  for (const auto& track_el : point3D.Track().Elements()) {
+  for (const auto& track_el : line3D.Track().Elements()) {
     const std::vector<CorrespondenceGraph::Correspondence>& corrs =
         correspondence_graph_->FindCorrespondences(track_el.image_id,
-                                                   track_el.line2D_idx);
+                                                   track_el.point2D_idx);
 
     for (const auto corr : corrs) {
       const auto& image = reconstruction_->Image(corr.image_id);
@@ -635,40 +635,40 @@ size_t IncrementalLineTriangulator::Merge(const Options& options,
         continue;
       }
 
-      const Point2D& corr_point2D = image.Point2D(corr.line2D_idx);
-      if (!corr_point2D.HasPoint3D() ||
-          corr_point2D.Point3DId() == line3D_id ||
-          merge_trials_[line3D_id].count(corr_point2D.Point3DId()) > 0) {
+      const Line2D& corr_line2D = image.Line2D(corr.point2D_idx);
+      if (!corr_line2D.HasLine3D() ||
+          corr_line2D.Line3DId() == line3D_id ||
+          merge_trials_[line3D_id].count(corr_line2D.Line3DId()) > 0) {
         continue;
       }
 
-      // Try to merge the two 3D points.
+      // Try to merge the two 3D line.
+      const Line3D& corr_line3D =
+          reconstruction_->Line3D(corr_line2D.Line3DId());
 
-      const Point3D& corr_point3D =
-          reconstruction_->Point3D(corr_point2D.Point3DId());
+      merge_trials_[line3D_id].insert(corr_line2D.Line3DId());
+      merge_trials_[corr_line2D.Line3DId()].insert(line3D_id);
 
-      merge_trials_[line3D_id].insert(corr_point2D.Point3DId());
-      merge_trials_[corr_point2D.Point3DId()].insert(line3D_id);
+      // TODO: Maybe do this weighted based on track length as in original triangulator
+      //       Note that this merging is recomputing in Reconstruction::Merge3DLines
+      //       so we should also update it here in this case.
+      const std::pair<Eigen::Vector3d, Eigen::Vector3d> merged_xyz =
+          FitLineToPoints({line3D.XYZ1(), line3D.XYZ2(), corr_line3D.XYZ1(), corr_line3D.XYZ2()});
 
-      // Weighted average of point locations, depending on track length.
-      const Eigen::Vector3d merged_xyz =
-          (point3D.Track().Length() * point3D.XYZ() +
-           corr_point3D.Track().Length() * corr_point3D.XYZ()) /
-          (point3D.Track().Length() + corr_point3D.Track().Length());
-
+      
       // Count number of inlier track elements of the merged track.
       bool merge_success = true;
-      for (const Track* track : {&point3D.Track(), &corr_point3D.Track()}) {
+      for (const Track* track : {&line3D.Track(), &corr_line3D.Track()}) {
         for (const auto test_track_el : track->Elements()) {
           const Image& test_image =
               reconstruction_->Image(test_track_el.image_id);
           const Camera& test_camera =
               reconstruction_->Camera(test_image.CameraId());
-          const Point2D& test_point2D =
-              test_image.Point2D(test_track_el.line2D_idx);
-          if (CalculateSquaredReprojectionError(
-                  test_point2D.XY(), merged_xyz, test_image.Qvec(),
-                  test_image.Tvec(), test_camera) > max_squared_reproj_error) {
+          const Line2D& test_line2D =
+              test_image.Line2D(test_track_el.point2D_idx);
+          if (CalculateSquaredLineReprojectionError(
+                  test_line2D.XY1(), test_line2D.XY2(), merged_xyz.first, merged_xyz.second,
+                  test_image.Qvec(), test_image.Tvec(), test_camera) > max_squared_reproj_error) {
             merge_success = false;
             break;
           }
@@ -678,20 +678,22 @@ size_t IncrementalLineTriangulator::Merge(const Options& options,
         }
       }
 
+      std::cout << StringPrintf("Merge: id %d -> id %d, success=\n", line3D_id, corr_line2D.Line3DId(), merge_success) << "\n";
+
       // Only accept merge if all track elements are inliers.
       if (merge_success) {
         const size_t num_merged =
-            point3D.Track().Length() + corr_point3D.Track().Length();
+            line3D.Track().Length() + corr_line3D.Track().Length();
 
-        const point3D_t merged_point3D_id = reconstruction_->MergePoints3D(
-            line3D_id, corr_point2D.Point3DId());
+        const point3D_t merged_line3D_id = reconstruction_->MergeLine3D(
+            line3D_id, corr_line2D.Line3DId());
 
         modified_line3D_ids_.erase(line3D_id);
-        modified_line3D_ids_.erase(corr_point2D.Point3DId());
-        modified_line3D_ids_.insert(merged_point3D_id);
+        modified_line3D_ids_.erase(corr_line2D.Line3DId());
+        modified_line3D_ids_.insert(merged_line3D_id);
 
         // Merge merged 3D point and return, as the original points are deleted.
-        const size_t num_merged_recursive = Merge(options, merged_point3D_id);
+        const size_t num_merged_recursive = Merge(options, merged_line3D_id);
         if (num_merged_recursive > 0) {
           return num_merged_recursive;
         } else {
@@ -700,7 +702,7 @@ size_t IncrementalLineTriangulator::Merge(const Options& options,
       }
     }
   }
-  */
+  
   return 0;
 }
 

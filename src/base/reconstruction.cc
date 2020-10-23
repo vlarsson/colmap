@@ -328,6 +328,36 @@ point3D_t Reconstruction::MergePoints3D(const point3D_t point3D_id1,
   return merged_point3D_id;
 }
 
+
+point3D_t Reconstruction::MergeLine3D(const point3D_t line3D_id1,
+                                        const point3D_t line3D_id2) {
+  const class Line3D& line3D1 = Line3D(line3D_id1);
+  const class Line3D& line3D2 = Line3D(line3D_id2);
+
+
+  const std::pair<Eigen::Vector3d, Eigen::Vector3d> merged_xyz =
+        FitLineToPoints({line3D1.XYZ1(), line3D1.XYZ2(), line3D2.XYZ1(), line3D2.XYZ2()});
+  
+  // TODO consistently handle color for line segments...
+  const Eigen::Vector3d merged_rgb =
+      (line3D1.Track().Length() * line3D1.Color().cast<double>() +
+       line3D2.Track().Length() * line3D2.Color().cast<double>()) /
+      (line3D1.Track().Length() + line3D2.Track().Length());
+
+  Track merged_track;
+  merged_track.Reserve(line3D1.Track().Length() + line3D2.Track().Length());
+  merged_track.AddElements(line3D1.Track().Elements());
+  merged_track.AddElements(line3D2.Track().Elements());
+
+  DeleteLine3D(line3D_id1);
+  DeleteLine3D(line3D_id2);
+
+  const point3D_t merged_line3D_id =
+      AddLine3D(merged_xyz.first, merged_xyz.second, merged_track, merged_rgb.cast<uint8_t>());
+
+  return merged_line3D_id;
+}
+
 void Reconstruction::DeletePoint3D(const point3D_t point3D_id) {
   // Note: Do not change order of these instructions, especially with respect to
   // `Reconstruction::ResetTriObservations`

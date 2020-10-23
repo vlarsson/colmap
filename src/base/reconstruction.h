@@ -161,6 +161,10 @@ class Reconstruction {
   // original 3D point's locations according to their track lengths.
   point3D_t MergePoints3D(const point3D_t point3D_id1,
                           const point3D_t point3D_id2);
+  // Merge two 3D lines. The merge line is created by fitting a new line
+  // to the four endpoints of the two line segments.
+  point3D_t MergeLine3D(const point3D_t line3D_id1,
+                          const point3D_t line3D_id2);
 
   // Delete a 3D point, and all its references in the observed images.
   void DeletePoint3D(const point3D_t point3D_id);

@@ -30,9 +30,58 @@
 // Author: Johannes L. Schoenberger (jsch-at-demuc-dot-de)
 
 #include "base/line3d.h"
+#include <Eigen/Dense>
 
 namespace colmap {
 
 Line3D::Line3D() : xyz1_(0.0, 0.0, 0.0), xyz2_(0.0, 0.0, 0.0), color_(0, 0, 0), error_(-1.0) {}
+
+std::pair<Eigen::Vector3d, Eigen::Vector3d> FitLineToPoints(const std::vector<Eigen::Vector3d> &points) {
+
+    Eigen::Vector3d m;
+    Eigen::Matrix3d tensor;
+
+    m.setZero();
+    tensor.setZero();
+    for(const Eigen::Vector3d &pt : points) {
+        m += pt;
+    }
+    m /= points.size();
+
+    // Compute centered structure tensor
+    for(const Eigen::Vector3d &pt : points) {
+        tensor += (pt - m) * (pt - m).transpose();
+    }
+
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eig(tensor);    
+    // the eigenvalues are sorted in increasing order
+    Eigen::Vector3d v = eig.eigenvectors().col(2);
+
+    Eigen::Vector3d X0 = m;
+    Eigen::Vector3d X1 = m + v;
+
+
+    double min_p = std::numeric_limits<double>::max();
+    double max_p = std::numeric_limits<double>::min();
+    for(const Eigen::Vector3d &pt : points) {
+        double p = ProjectPointToLineParameter(pt, {X0, X1});
+        min_p = std::min(min_p, p);
+        max_p = std::max(max_p, p);
+    }
+
+    return {min_p * X0 + (1-min_p) * X1, min_p * X0 + (1-max_p) * X1};
+}
+
+Eigen::Vector3d ProjectPointToLine(const Eigen::Vector3d &point, const std::pair<Eigen::Vector3d, Eigen::Vector3d> &line) {    
+    double t = ProjectPointToLineParameter(point, line);
+    return t * line.first + (1-t) * line.second;
+}
+
+double ProjectPointToLineParameter(const Eigen::Vector3d &point, const std::pair<Eigen::Vector3d, Eigen::Vector3d> &line) {
+    // t * X1 + (1-t) * X2 = point
+    // (X1-X2) * t = point - X2
+    Eigen::Vector3d V = line.first - line.second;
+    return V.dot(point - line.second) / V.squaredNorm();    
+}
 
 }  // namespace colmap

@@ -178,7 +178,7 @@ class IncrementalLineTriangulator {
                   const std::vector<CorrData>& corrs_data);
 
   // Try to merge 3D point with any of its corresponding 3D points.
-  size_t Merge(const Options& options, const point3D_t point3D_id);
+  size_t Merge(const Options& options, const point3D_t line3D_id);
 
   // Try to transitively complete the track of a 3D point.
   size_t Complete(const Options& options, const point3D_t point3D_id);

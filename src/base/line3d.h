@@ -33,7 +33,7 @@
 #define COLMAP_SRC_BASE_LINE3D_H_
 
 #include <vector>
-
+#include <utility>
 #include <Eigen/Core>
 
 #include "base/track.h"
@@ -99,6 +99,18 @@ class Line3D {
   // The track of the point as a list of image observations.
   class Track track_;
 };
+
+// Fits a line to a vector of points. The returned endpoints matches the extent of the original points
+std::pair<Eigen::Vector3d, Eigen::Vector3d> FitLineToPoints(const std::vector<Eigen::Vector3d> &points);
+
+// Projects a point to a line
+Eigen::Vector3d ProjectPointToLine(const Eigen::Vector3d &point, const std::pair<Eigen::Vector3d, Eigen::Vector3d> &line);
+
+// Finds the parameter for the convex combination of the end points, i.e.
+//        t * X1 + (1-t) * X2 = projection
+// thus if t \in [0,1], we have a point inside the current line segment
+double ProjectPointToLineParameter(const Eigen::Vector3d &point, const std::pair<Eigen::Vector3d, Eigen::Vector3d> &line);
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Implementation
