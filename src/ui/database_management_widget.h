@@ -65,6 +65,7 @@ class TwoViewInfoTab : public QWidget {
 
   const Image* image_;
   std::vector<std::pair<const Image*, FeatureMatches>> matches_;
+  std::vector<std::pair<const Image*, FeatureMatches>> line_matches_;
   std::vector<int> configs_;
   std::vector<size_t> sorted_matches_idxs_;
 

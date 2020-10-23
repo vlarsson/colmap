@@ -91,17 +91,22 @@ void TwoViewInfoTab::ShowMatches() {
   const size_t idx =
       sorted_matches_idxs_[select->selectedRows().begin()->row()];
   const auto& selection = matches_[idx];
+  const auto line_matches = line_matches_[idx].second;
   const std::string path1 = JoinPaths(*options_->image_path, image_->Name());
   const std::string path2 =
       JoinPaths(*options_->image_path, selection.first->Name());
   const auto keypoints1 = database_->ReadKeypoints(image_->ImageId());
   const auto keypoints2 = database_->ReadKeypoints(selection.first->ImageId());
+  const auto line_segments1 = database_->ReadLineSegments(image_->ImageId());
+  const auto line_segments2 = database_->ReadLineSegments(selection.first->ImageId());
 
   matches_viewer_widget_->setWindowTitle(QString::fromStdString(
       "Matches for image pair " + std::to_string(image_->ImageId()) + " - " +
       std::to_string(selection.first->ImageId())));
   matches_viewer_widget_->ReadAndShowWithMatches(path1, path2, keypoints1,
-                                                 keypoints2, selection.second);
+                                                 keypoints2, selection.second,
+                                                 line_segments1, line_segments2,
+                                                 line_matches);
 }
 
 void TwoViewInfoTab::FillTable() {
@@ -134,10 +139,15 @@ void TwoViewInfoTab::FillTable() {
     table_widget_->setItem(i, 1, num_matches_item);
 
     // config for inlier matches tab
-    if (table_widget_->columnCount() == 3) {
+    //if (table_widget_->columnCount() == 3) {
+    if(table_widget_->horizontalHeaderItem(2)->text() == "config") {
       QTableWidgetItem* config_item =
           new QTableWidgetItem(QString::number(configs_[idx]));
       table_widget_->setItem(i, 2, config_item);
+    } else {
+      QTableWidgetItem* num_line_matches =
+          new QTableWidgetItem(QString::number(line_matches_[idx].second.size()));
+      table_widget_->setItem(i, 2, num_line_matches);
     }
   }
 
@@ -149,7 +159,8 @@ MatchesTab::MatchesTab(QWidget* parent, OptionManager* options,
     : TwoViewInfoTab(parent, options, database) {
   QStringList table_header;
   table_header << "image_id"
-               << "num_matches";
+               << "num_matches"
+               << "num_line_matches";
   InitializeTable(table_header);
 }
 
@@ -171,6 +182,9 @@ void MatchesTab::Reload(const std::vector<Image>& images,
       if (matches.size() > 0) {
         matches_.emplace_back(&image, matches);
       }
+
+      const auto line_matches = database_->ReadLineMatches(image_id, image.ImageId());
+      line_matches_.emplace_back(&image, line_matches);
     }
   }
 

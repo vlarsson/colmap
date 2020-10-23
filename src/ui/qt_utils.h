@@ -60,8 +60,14 @@ QPixmap ShowImagesSideBySide(const QPixmap& image1, const QPixmap& image2);
 QPixmap DrawMatches(const QPixmap& image1, const QPixmap& image2,
                     const FeatureKeypoints& points1,
                     const FeatureKeypoints& points2,
-                    const FeatureMatches& matches,
-                    const QColor& keypoints_color = Qt::red);
+                    const FeatureMatches& matches,                    
+                    const QColor& keypoints_color,
+                    const FeatureLineSegments& line_segments1,
+                    const FeatureLineSegments& line_segments2,
+                    const FeatureMatches& line_matches,
+                    bool draw_keypoints, bool draw_lines);
+
+
 
 }  // namespace colmap
 

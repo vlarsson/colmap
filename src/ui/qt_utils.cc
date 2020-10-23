@@ -130,14 +130,16 @@ void DrawLineSegments(QPixmap* pixmap, const FeatureLineSegments& lines,
 QPixmap DrawMatches(const QPixmap& image1, const QPixmap& image2,
                     const FeatureKeypoints& points1,
                     const FeatureKeypoints& points2,
-                    const FeatureMatches& matches,
-                    const QColor& keypoints_color) {
+                    const FeatureMatches& matches,                    
+                    const QColor& keypoints_color,
+                    const FeatureLineSegments& line_segments1,
+                    const FeatureLineSegments& line_segments2,
+                    const FeatureMatches& line_matches,
+                    bool draw_keypoints, bool draw_lines) {
   QPixmap image = ShowImagesSideBySide(image1, image2);
 
   QPainter painter(&image);
   painter.setRenderHint(QPainter::Antialiasing);
-
-  // Draw keypoints
 
   const int pen_width = std::max(image.width(), image.height()) / 2048 + 1;
   const int radius = 3 * pen_width + (3 * pen_width) % 2;
@@ -148,28 +150,53 @@ QPixmap DrawMatches(const QPixmap& image1, const QPixmap& image2,
   pen.setColor(keypoints_color);
   painter.setPen(pen);
 
-  for (const auto& point : points1) {
-    painter.drawEllipse(point.x - radius2, point.y - radius2, radius, radius);
+  // Draw keypoints
+  if(draw_keypoints) {
+    for (const auto& point : points1) {
+      painter.drawEllipse(point.x - radius2, point.y - radius2, radius, radius);
+    }
+    for (const auto& point : points2) {
+      painter.drawEllipse(image1.width() + point.x - radius2, point.y - radius2,
+                          radius, radius);
+    }
+
+    // Draw matches
+
+    pen.setWidth(std::max(pen_width / 2, 1));
+
+    for (const auto& match : matches) {
+      const point2D_t idx1 = match.point2D_idx1;
+      const point2D_t idx2 = match.point2D_idx2;
+      pen.setColor(QColor(0, 255, 0));
+      painter.setPen(pen);
+      painter.drawLine(QPoint(points1[idx1].x, points1[idx1].y),
+                      QPoint(image1.width() + points2[idx2].x, points2[idx2].y));
+    }
   }
-  for (const auto& point : points2) {
-    painter.drawEllipse(image1.width() + point.x - radius2, point.y - radius2,
-                        radius, radius);
-  }
 
-  // Draw matches
-
-  pen.setWidth(std::max(pen_width / 2, 1));
-
-  for (const auto& match : matches) {
-    const point2D_t idx1 = match.point2D_idx1;
-    const point2D_t idx2 = match.point2D_idx2;
-    pen.setColor(QColor(0, 255, 0));
-    painter.setPen(pen);
-    painter.drawLine(QPoint(points1[idx1].x, points1[idx1].y),
-                     QPoint(image1.width() + points2[idx2].x, points2[idx2].y));
+  if(draw_lines) {
+    int num_line_matches = line_matches.size();
+    std::vector<double> hue(num_line_matches);    
+    double h_step = 360.0 / num_line_matches;
+    
+    for(int i = 0; i < num_line_matches; ++i) {
+      hue[i] = h_step * i; 
+    }
+    
+    // draw lines a bit thicker since we have fewer
+    pen.setWidth(3*pen_width);
+    for(size_t i = 0; i < num_line_matches; ++i) {
+      const FeatureLineSegment &line1 = line_segments1[line_matches[i].point2D_idx1];
+      const FeatureLineSegment &line2 = line_segments2[line_matches[i].point2D_idx2];
+      pen.setColor(QColor::fromHsv(hue[i], 255, 255));
+      painter.setPen(pen);
+      painter.drawLine(line1.x1, line1.y1, line1.x2, line1.y2);                      
+      painter.drawLine(image1.width() + line2.x1, line2.y1, image1.width() + line2.x2, line2.y2);                      
+    }
   }
 
   return image;
 }
+
 
 }  // namespace colmap

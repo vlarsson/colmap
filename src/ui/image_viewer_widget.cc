@@ -155,9 +155,9 @@ void ImageViewerWidget::Save() {
 FeatureImageViewerWidget::FeatureImageViewerWidget(
     QWidget* parent, const std::string& switch_text)
     : ImageViewerWidget(parent),
-      switch_state_(true),
+      switch_state_(State::DRAW_BOTH),
       switch_text_(switch_text) {
-  switch_button_ = new QPushButton(tr(("Hide " + switch_text_).c_str()), this);
+  switch_button_ = new QPushButton(tr(("Toggle " + switch_text_).c_str()), this);
   switch_button_->setFont(font());
   button_layout_->addWidget(switch_button_);
   connect(switch_button_, &QPushButton::released, this,
@@ -175,6 +175,9 @@ void FeatureImageViewerWidget::ReadAndShowWithKeypoints(
 
   image1_ = QPixmap::fromImage(BitmapToQImageRGB(bitmap));
   image2_ = image1_;
+  image3_ = image1_;
+  image4_ = image1_;
+
 
   const size_t num_tri_keypoints = std::count_if(
       tri_mask.begin(), tri_mask.end(), [](const bool tri) { return tri; });
@@ -195,6 +198,8 @@ void FeatureImageViewerWidget::ReadAndShowWithKeypoints(
 
   DrawKeypoints(&image2_, keypoints_tri, Qt::magenta);
   DrawKeypoints(&image2_, keypoints_not_tri, Qt::red);
+  DrawKeypoints(&image3_, keypoints_tri, Qt::magenta);
+  DrawKeypoints(&image3_, keypoints_not_tri, Qt::red);
 
   const size_t num_tri_lines = std::count_if(
       tri_mask_lines.begin(), tri_mask_lines.end(), [](const bool tri) { return tri; });
@@ -215,9 +220,15 @@ void FeatureImageViewerWidget::ReadAndShowWithKeypoints(
 
   DrawLineSegments(&image2_, lines_tri, Qt::magenta);
   DrawLineSegments(&image2_, lines_not_tri, Qt::blue);
+  DrawLineSegments(&image4_, lines_tri, Qt::magenta);
+  DrawLineSegments(&image4_, lines_not_tri, Qt::blue);
 
-  if (switch_state_) {
+  if (switch_state_ == State::DRAW_BOTH) {
     ShowPixmap(image2_);
+  } else if(switch_state_ == State::DRAW_KEYPOINTS) {
+    ShowPixmap(image3_);
+  } else if(switch_state_ == State::DRAW_LINES) {
+    ShowPixmap(image4_);
   } else {
     ShowPixmap(image1_);
   }
@@ -226,7 +237,8 @@ void FeatureImageViewerWidget::ReadAndShowWithKeypoints(
 void FeatureImageViewerWidget::ReadAndShowWithMatches(
     const std::string& path1, const std::string& path2,
     const FeatureKeypoints& keypoints1, const FeatureKeypoints& keypoints2,
-    const FeatureMatches& matches) {
+    const FeatureMatches& matches, const FeatureLineSegments& line_segments1,
+    const FeatureLineSegments& line_segments2, const FeatureMatches& line_matches) {
   Bitmap bitmap1;
   Bitmap bitmap2;
   if (!bitmap1.Read(path1, true) || !bitmap2.Read(path2, true)) {
@@ -239,24 +251,37 @@ void FeatureImageViewerWidget::ReadAndShowWithMatches(
   const auto image2 = QPixmap::fromImage(BitmapToQImageRGB(bitmap2));
 
   image1_ = ShowImagesSideBySide(image1, image2);
-  image2_ = DrawMatches(image1, image2, keypoints1, keypoints2, matches);
+  image2_ = DrawMatches(image1, image2, keypoints1, keypoints2, matches,
+        Qt::red, line_segments1, line_segments2, line_matches, true, true);
+  image3_ = DrawMatches(image1, image2, keypoints1, keypoints2, matches,
+       Qt::red, line_segments1, line_segments2, line_matches, true, false);
+  image4_ = DrawMatches(image1, image2, keypoints1, keypoints2, matches,
+       Qt::red, line_segments1, line_segments2, line_matches, false, true);     
 
-  if (switch_state_) {
+  if (switch_state_ == State::DRAW_BOTH) {
     ShowPixmap(image2_);
+  } else if(switch_state_ == State::DRAW_KEYPOINTS) {
+    ShowPixmap(image3_);
+  } else if(switch_state_ == State::DRAW_LINES) {
+    ShowPixmap(image4_);
   } else {
     ShowPixmap(image1_);
   }
 }
 
 void FeatureImageViewerWidget::ShowOrHide() {
-  if (switch_state_) {
-    switch_button_->setText(std::string("Show " + switch_text_).c_str());
+  if (switch_state_ == State::DRAW_BOTH) {
+    switch_state_ = State::DRAW_LINES;
+    ShowPixmap(image4_);
+  } else if(switch_state_ == State::DRAW_KEYPOINTS) {
+    switch_state_ = State::DRAW_NONE;
     ShowPixmap(image1_);
-    switch_state_ = false;
+  } else if(switch_state_ == State::DRAW_LINES) {
+    switch_state_ = State::DRAW_KEYPOINTS;
+    ShowPixmap(image3_);
   } else {
-    switch_button_->setText(std::string("Hide " + switch_text_).c_str());
+    switch_state_ = State::DRAW_BOTH;
     ShowPixmap(image2_);
-    switch_state_ = true;
   }
 }
 

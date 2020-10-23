@@ -95,14 +95,24 @@ class FeatureImageViewerWidget : public ImageViewerWidget {
                               const std::string& path2,
                               const FeatureKeypoints& keypoints1,
                               const FeatureKeypoints& keypoints2,
-                              const FeatureMatches& matches);
+                              const FeatureMatches& matches,
+                              const FeatureLineSegments& line_segments1,
+                              const FeatureLineSegments& line_segments2,
+                              const FeatureMatches& line_matches);
 
  protected:
   void ShowOrHide();
 
-  QPixmap image1_;
-  QPixmap image2_;
-  bool switch_state_;
+  QPixmap image1_; // 
+  QPixmap image2_; // 
+  QPixmap image3_;
+  QPixmap image4_;
+  enum State {
+    DRAW_NONE,
+    DRAW_BOTH,
+    DRAW_KEYPOINTS,
+    DRAW_LINES
+  } switch_state_;
   QPushButton* switch_button_;
   const std::string switch_text_;
 };
