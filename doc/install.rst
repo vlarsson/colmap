@@ -116,11 +116,6 @@ Configure and compile COLMAP::
     make -j
     sudo make install
 
-Under newer Ubuntu versions it might be necessary to explicitly select the used
-GCC version due to compatiblity issues with CUDA, which can be done as::
-
-    CC=/usr/bin/gcc-6 CXX=/usr/bin/g++-6 cmake ..
-
 Run COLMAP::
 
     colmap -h
@@ -144,7 +139,7 @@ Dependencies from `Homebrew <http://brew.sh/>`_::
         gflags \
         suite-sparse \
         ceres-solver \
-        qt \
+        qt5 \
         glew \
         cgal
 
@@ -158,6 +153,13 @@ Configure and compile COLMAP::
     cmake .. -DQt5_DIR=/usr/local/opt/qt/lib/cmake/Qt5
     make
     sudo make install
+
+If you have Qt 6 installed on your system as well, you might have to temporarily
+link your Qt 5 installation while configuring CMake:
+
+    brew link qt5
+    ... cmake configuration
+    brew unlink qt5
 
 Run COLMAP::
 
@@ -208,6 +210,14 @@ the latest commit in the dev branch, you can use the following options::
     ./vcpkg install colmap:x64-linux --head
 
 To modify the source code, you can further add ``--editable --no-downloads``.
+Or, if you want to build from another folder and use the dependencies from
+vcpkg, first run `./vcpkg integrate install` and then configure COLMAP as::
+
+    cd path/to/colmap
+    mkdir build
+    cd build
+    cmake .. -DCMAKE_TOOLCHAIN_FILE=path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
+    cmake --build . --config release --target colmap_exe --parallel 24
 
 Alternatively, you can also use the Python build script. Please follow the
 instructions in the next section, but VCPKG is now the recommended approach.
@@ -305,6 +315,22 @@ with the source code ``hello_world.cc``::
         return EXIT_SUCCESS;
     }
 
+
+----------------
+AddressSanitizer
+----------------
+
+If you want to build COLMAP with address sanitizer flags enabled, you need to
+use a recent compiler with ASan support. For example, you can manually install
+a recent clang version on your Ubuntu machine and invoke CMake as follows::
+
+    CC=/usr/bin/clang CXX=/usr/bin/clang++ cmake .. \
+        -DASAN_ENABLED=ON \
+        -DTESTS_ENABLED=ON \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+Note that it is generally useful to combine ASan with debug symbols to get
+meaningful traces for reported issues.
 
 -------------
 Documentation

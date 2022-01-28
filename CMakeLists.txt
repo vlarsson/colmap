@@ -33,8 +33,8 @@ cmake_minimum_required(VERSION 3.0)
 
 project(COLMAP)
 
-set(COLMAP_VERSION "3.7")
-set(COLMAP_VERSION_NUMBER "3700")
+set(COLMAP_VERSION "3.8")
+set(COLMAP_VERSION_NUMBER "3800")
 
 
 ################################################################################
@@ -58,9 +58,12 @@ option(SIMD_ENABLED "Whether to enable SIMD optimizations" ON)
 option(OPENMP_ENABLED "Whether to enable OpenMP parallelization" ON)
 option(IPO_ENABLED "Whether to enable interprocedural optimization" ON)
 option(CUDA_ENABLED "Whether to enable CUDA, if available" ON)
+option(GUI_ENABLED "Whether to enable the graphical UI" ON)
 option(OPENGL_ENABLED "Whether to enable OpenGL, if available" ON)
 option(TESTS_ENABLED "Whether to build test binaries" OFF)
+option(ASAN_ENABLED "Whether to enable AddressSanitizer flags" OFF)
 option(PROFILING_ENABLED "Whether to enable google-perftools linker flags" OFF)
+option(CCACHE_ENABLED "Whether to enable compiler caching, if available" ON)
 option(CGAL_ENABLED "Whether to enable the CGAL library" ON)
 option(BOOST_STATIC "Whether to enable static boost library linker flags" ON)
 set(CUDA_ARCHS "Auto" CACHE STRING "List of CUDA architectures for which to \
@@ -114,13 +117,21 @@ if(CUDA_ENABLED)
     find_package(CUDA ${CUDA_MIN_VERSION} QUIET)
 endif()
 
-find_package(Qt5 5.4 REQUIRED COMPONENTS Core OpenGL Widgets)
+if(GUI_ENABLED)
+    find_package(Qt5 5.4 COMPONENTS Core OpenGL Widgets)
+    if(Qt5_FOUND)
+        message(STATUS "Found Qt")
+        message(STATUS "  Module : ${Qt5Core_DIR}")
+        message(STATUS "  Module : ${Qt5OpenGL_DIR}")
+        message(STATUS "  Module : ${Qt5Widgets_DIR}")
+    else()
+        set(GUI_ENABLED OFF)
+    endif()
+endif()
 
-if(Qt5_FOUND)
-    message(STATUS "Found Qt")
-    message(STATUS "  Module : ${Qt5Core_DIR}")
-    message(STATUS "  Module : ${Qt5OpenGL_DIR}")
-    message(STATUS "  Module : ${Qt5Widgets_DIR}")
+if(OPENGL_ENABLED AND NOT GUI_ENABLED)
+    message(STATUS "Disabling GUI will also disable OpenGL")
+    set(OPENGL_ENABLED OFF)
 endif()
 
 if(CGAL_FOUND)
@@ -189,6 +200,16 @@ else()
     message(STATUS "Disabling interprocedural optimization")
 endif()
 
+if(ASAN_ENABLED)
+    message(STATUS "Enabling ASan support")
+    if(IS_CLANG OR IS_GNU)
+        add_compile_options(-fsanitize=address -fno-omit-frame-pointer -fsanitize-address-use-after-scope)
+        add_link_options(-fsanitize=address)
+    else()
+        message(FATAL_ERROR "Unsupported compiler for ASan mode")
+    endif()
+endif()
+
 if(CUDA_FOUND)
     if(CUDA_ENABLED)
         add_definitions("-DCUDA_ENABLED")
@@ -220,11 +241,31 @@ else()
     endif()
 endif()
 
+if(GUI_ENABLED AND Qt5_FOUND)
+    add_definitions("-DGUI_ENABLED")
+    message(STATUS "Enabling GUI support")
+else()
+    message(STATUS "Disabling GUI support")
+endif()
+
 if(OPENGL_ENABLED)
     add_definitions("-DOPENGL_ENABLED")
     message(STATUS "Enabling OpenGL support")
 else()
     message(STATUS "Disabling OpenGL support")
+endif()
+
+if(CCACHE_ENABLED)
+    find_program(CCACHE ccache)
+    if(CCACHE)
+        message(STATUS "Enabling ccache support")
+        set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE})
+        set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE})
+    else()
+        message(STATUS "Disabling ccache support")
+    endif()
+else()
+    message(STATUS "Disabling ccache support")
 endif()
 
 if(PROFILING_ENABLED)
@@ -243,17 +284,18 @@ else()
     set(CGAL_ENABLED OFF)
 endif()
 
-# Qt5 was built with -reduce-relocations.
-if(Qt5_POSITION_INDEPENDENT_CODE)
-    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-    if(CUDA_ENABLED AND NOT IS_MSVC)
-        set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --compiler-options -fPIC")
+if(Qt5_FOUND)
+    # Qt5 was built with -reduce-relocations.
+    if(Qt5_POSITION_INDEPENDENT_CODE)
+        set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+        if(CUDA_ENABLED AND NOT IS_MSVC)
+            set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --compiler-options -fPIC")
+        endif()
     endif()
+
+    # Enable automatic compilation of Qt resource files.
+    set(CMAKE_AUTORCC ON)
 endif()
-
-# Enable automatic compilation of Qt resource files.
-set(CMAKE_AUTORCC ON)
-
 
 ################################################################################
 # Add sources
@@ -269,9 +311,6 @@ set(COLMAP_INCLUDE_DIRS
     ${FREEIMAGE_INCLUDE_DIRS}
     ${CERES_INCLUDE_DIRS}
     ${GLEW_INCLUDE_DIRS}
-    ${Qt5Core_INCLUDE_DIRS}
-    ${Qt5OpenGL_INCLUDE_DIRS}
-    ${Qt5Widgets_INCLUDE_DIRS}
 )
 
 set(COLMAP_LINK_DIRS
@@ -287,13 +326,15 @@ set(COLMAP_EXTERNAL_LIBRARIES
     ${FREEIMAGE_LIBRARIES}
     ${CERES_LIBRARIES}
     ${OPENGL_LIBRARIES}
-    ${Qt5Core_LIBRARIES}
-    ${Qt5OpenGL_LIBRARIES}
-    ${Qt5Widgets_LIBRARIES}
 )
 
 if(OPENMP_FOUND)
     list(APPEND COLMAP_EXTERNAL_LIBRARIES ${OpenMP_libomp_LIBRARY})
+endif()
+
+if(Qt5_FOUND)
+    list(APPEND COLMAP_INCLUDE_DIRS ${Qt5Core_INCLUDE_DIRS} ${Qt5OpenGL_INCLUDE_DIRS} ${Qt5Widgets_INCLUDE_DIRS})
+    list(APPEND COLMAP_EXTERNAL_LIBRARIES ${Qt5Core_LIBRARIES} ${Qt5OpenGL_LIBRARIES} ${Qt5Widgets_LIBRARIES})
 endif()
 
 if(CGAL_FOUND)
