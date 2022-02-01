@@ -798,7 +798,8 @@ RigBundleAdjuster::RigBundleAdjuster(const BundleAdjustmentOptions& options,
     : BundleAdjuster(options, config), rig_options_(rig_options) {}
 
 bool RigBundleAdjuster::Solve(Reconstruction* reconstruction,
-                              std::vector<CameraRig>* camera_rigs) {
+                              std::vector<CameraRig>* camera_rigs,
+                              std::vector<Eigen::MatrixXd> *rig_covariance) {
   CHECK_NOTNULL(reconstruction);
   CHECK_NOTNULL(camera_rigs);
   CHECK(!problem_) << "Cannot use the same BundleAdjuster multiple times";
@@ -867,6 +868,94 @@ bool RigBundleAdjuster::Solve(Reconstruction* reconstruction,
   if (options_.print_summary) {
     PrintHeading2("Rig Bundle adjustment report");
     PrintSolverSummary(summary_);
+  }
+
+
+
+  if(rig_options_.estimate_covariance) {
+    // set points to be constant since we dont care about them
+    for(auto p : point3D_num_observations_) {
+      if(p.second > 0) {
+        double *pp = reconstruction->Point3D(p.first).XYZ().data();
+        problem_.get()->SetParameterBlockConstant(pp);
+      }
+    }
+    
+    ceres::Solve(solver_options, problem_.get(), &summary_);
+
+    if (solver_options.minimizer_progress_to_stdout) {
+      std::cout << std::endl;
+    }
+
+    if (options_.print_summary) {
+      PrintHeading2("Rig Bundle adjustment report - only poses");
+      PrintSolverSummary(summary_);
+    }
+
+    for(size_t rig_k = 0; rig_k < camera_rigs->size(); ++rig_k) {
+      ceres::Covariance::Options options;
+      options.algorithm_type = ceres::DENSE_SVD;
+      options.null_space_rank = -1;
+      ceres::Covariance covariance(options);
+      std::vector<std::pair<const double*, const double*>> covariance_blocks;
+
+      CameraRig &rig = camera_rigs->at(rig_k);
+      size_t num_cams = rig.NumCameras();
+      Eigen::MatrixXd cov(6 * num_cams, 6 * num_cams);
+      std::vector<camera_t> cam_ids = rig.GetCameraIds();
+      for(size_t i = 0; i < cam_ids.size(); ++i) {
+        double *qi = rig.RelativeQvec(cam_ids[i]).data();
+        double *ti = rig.RelativeTvec(cam_ids[i]).data();
+
+        // intra-camera covariance
+        covariance_blocks.push_back(std::make_pair(qi,qi));
+        covariance_blocks.push_back(std::make_pair(qi,ti));
+        covariance_blocks.push_back(std::make_pair(ti,ti));
+
+        // cross camera covariance
+        for(size_t j = 0; j < i; ++j) {
+          double *qj = rig.RelativeQvec(cam_ids[j]).data();
+          double *tj = rig.RelativeTvec(cam_ids[j]).data();
+
+          covariance_blocks.push_back(std::make_pair(qi,qj));
+          covariance_blocks.push_back(std::make_pair(qi,tj));
+          covariance_blocks.push_back(std::make_pair(ti,qj));
+          covariance_blocks.push_back(std::make_pair(ti,tj));
+        }
+      }
+
+      covariance.Compute(covariance_blocks, problem_.get());
+
+      // now we fill in the data
+      Eigen::Matrix<double, 3,  3> C;
+      double *c_data = C.data();
+
+      for(size_t i = 0; i < cam_ids.size(); ++i) {
+        double *qi = rig.RelativeQvec(cam_ids[i]).data();
+        double *ti = rig.RelativeTvec(cam_ids[i]).data();
+
+        for(size_t j = 0; j < cam_ids.size(); ++j) {
+
+          double *qj = rig.RelativeQvec(cam_ids[j]).data();
+          double *tj = rig.RelativeTvec(cam_ids[j]).data();
+
+          covariance.GetCovarianceBlockInTangentSpace(qi, qj, c_data);
+          cov.block<3,3>(6*i, 6*j) = C;
+
+          covariance.GetCovarianceBlockInTangentSpace(ti, tj, c_data);
+          cov.block<3,3>(6*i+3, 6*j+3) = C;
+
+          covariance.GetCovarianceBlockInTangentSpace(qi, tj, c_data);
+          cov.block<3,3>(6*i, 6*j+3) = C;
+
+          covariance.GetCovarianceBlockInTangentSpace(ti, qj, c_data);
+          cov.block<3,3>(6*i+3, 6*j) = C;
+        }
+      }
+
+      rig_covariance->push_back(cov);
+
+    }
   }
 
   TearDown(reconstruction, *camera_rigs);

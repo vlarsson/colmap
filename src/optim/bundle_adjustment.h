@@ -273,6 +273,9 @@ class RigBundleAdjuster : public BundleAdjuster {
     // Whether to optimize the relative poses of the camera rigs.
     bool refine_relative_poses = true;
 
+    // If we should estimate the rig covariance
+    bool estimate_covariance = true;
+
     // The maximum allowed reprojection error for an observation to be
     // considered in the bundle adjustment. Some observations might have large
     // reprojection errors due to the concatenation of the absolute and relative
@@ -286,7 +289,8 @@ class RigBundleAdjuster : public BundleAdjuster {
                     const BundleAdjustmentConfig& config);
 
   bool Solve(Reconstruction* reconstruction,
-             std::vector<CameraRig>* camera_rigs);
+             std::vector<CameraRig>* camera_rigs,
+             std::vector<Eigen::MatrixXd> *rig_covariance);
 
  private:
   void SetUp(Reconstruction* reconstruction,

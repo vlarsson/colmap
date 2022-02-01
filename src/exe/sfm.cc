@@ -666,6 +666,7 @@ int RunRigBundleAdjuster(int argc, char** argv) {
   std::string output_path;
   std::string rig_config_path;
   bool estimate_rig_relative_poses = true;
+  std::string output_covariance_path = "";
 
   RigBundleAdjuster::Options rig_ba_options;
 
@@ -675,8 +676,13 @@ int RunRigBundleAdjuster(int argc, char** argv) {
   options.AddRequiredOption("rig_config_path", &rig_config_path);
   options.AddDefaultOption("estimate_rig_relative_poses",
                            &estimate_rig_relative_poses);
+  options.AddDefaultOption("RigBundleAdjustment.estimate_covariance",
+                           &rig_ba_options.estimate_covariance);
+  options.AddDefaultOption("output_covariance_path",
+                           &output_covariance_path);
   options.AddDefaultOption("RigBundleAdjustment.refine_relative_poses",
                            &rig_ba_options.refine_relative_poses);
+
   options.AddBundleAdjustmentOptions();
   options.Parse(argc, argv);
 
@@ -705,12 +711,32 @@ int RunRigBundleAdjuster(int argc, char** argv) {
 
   PrintHeading1("Rig bundle adjustment");
 
+  std::vector<Eigen::MatrixXd> rig_covariance;
+
   BundleAdjustmentOptions ba_options = *options.bundle_adjustment;
   ba_options.solver_options.minimizer_progress_to_stdout = true;
   RigBundleAdjuster bundle_adjuster(ba_options, rig_ba_options, config);
-  CHECK(bundle_adjuster.Solve(&reconstruction, &camera_rigs));
+  CHECK(bundle_adjuster.Solve(&reconstruction, &camera_rigs, &rig_covariance));
 
   reconstruction.Write(output_path);
+
+  if(rig_ba_options.estimate_covariance) {
+    for(size_t k = 0; k < rig_covariance.size(); ++k) {
+      std::ofstream f_cov(output_covariance_path + "/rig_cov_" + std::to_string(k) + ".txt");
+      f_cov << rig_covariance[k] << "\n";
+      f_cov.close();
+
+      std::ofstream f_rig(output_covariance_path + "/rig_ext_" + std::to_string(k) + ".txt");
+      std::vector<camera_t> ids = camera_rigs[k].GetCameraIds();
+      for(camera_t id : ids) {
+        Eigen::Vector4d q = camera_rigs[k].RelativeQvec(id);
+        Eigen::Vector3d t = camera_rigs[k].RelativeTvec(id);
+        f_rig << id << " " << q(0) << " "<< q(1) << " "<< q(2) << " "<< q(3) << " ";
+        f_rig << t(0) << " " << t(1) << " " << t(2) << "\n";
+      }
+      f_rig.close();
+    }
+  }
 
   return EXIT_SUCCESS;
 }
