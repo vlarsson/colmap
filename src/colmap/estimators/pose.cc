@@ -39,6 +39,7 @@
 #include "colmap/sensor/models.h"
 #include "colmap/util/logging.h"
 #include "colmap/util/threading.h"
+#include <PoseLib/robust.h>
 
 namespace colmap {
 
@@ -65,18 +66,28 @@ bool EstimateAbsolutePose(const AbsolutePoseEstimationOptions& options,
       camera->CamFromImgThreshold(options.ransac_options.max_error);
 
   if (options.estimate_focal_length) {
-    // TODO(joschonb): Implement non-minimal solver for LORANSAC refinement.
-    RANSAC<P4PFEstimator> ransac(custom_ransac_options);
-    auto report = ransac.Estimate(points2D_normalized, points3D);
-    if (report.success) {
+    poselib::Image image;
+    poselib::RansacOptions poselib_ransac_opt;
+    poselib_ransac_opt.max_reproj_error = custom_ransac_options.max_error;
+    poselib_ransac_opt.min_iterations = 100;
+    poselib_ransac_opt.max_iterations = 10000;
+    poselib_ransac_opt.success_prob = 0.99999;
+    poselib::BundleOptions poselib_bundle_opt;
+    poselib_bundle_opt.loss_type = poselib::BundleOptions::TRIVIAL;
+
+    int config_flags = (1 << 0) | (1 << 1) | (0 << 2);
+    int config = 0 | (config_flags << 16);
+
+    poselib::RansacStats stats = poselib::estimate_absolute_pose_focal(points2D_normalized, points3D, poselib_ransac_opt, poselib_bundle_opt, &image, inlier_mask, config);
+
+    if (stats.num_inliers >= 15) { // TODO threshold?
       *cam_from_world =
-          Rigid3d(Eigen::Quaterniond(report.model.cam_from_world.leftCols<3>()),
-                  report.model.cam_from_world.col(3));
+          Rigid3d(Eigen::Quaterniond(image.pose.R()),
+                  image.pose.t);
       for (const size_t idx : camera->FocalLengthIdxs()) {
-        camera->params[idx] *= report.model.focal_length;
+        camera->params[idx] *= image.camera.params[0];
       }
-      *num_inliers = report.support.num_inliers;
-      *inlier_mask = std::move(report.inlier_mask);
+      *num_inliers = stats.num_inliers;
       return true;
     }
   } else {
