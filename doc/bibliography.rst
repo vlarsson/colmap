@@ -4,9 +4,6 @@ Bibliography
 .. [schoenberger_thesis] Johannes L. Schönberger. "Robust Methods for Accurate
    and Efficient 3D Modeling from Unstructured Imagery." ETH Zürich, 2018.
 
-.. [ceres] Agarwal, Sameer and Mierle, Keir and Others. "Ceres Solver".
-    http://ceres-solver.org
-
 .. [furukawa10] Furukawa, Yasutaka, and Jean Ponce.
     "Accurate, dense, and robust multiview stereopsis."
     Transactions on Pattern Analysis and Machine Intelligence, 2010.
@@ -39,10 +36,6 @@ Bibliography
 
 .. [lowe04] Lowe, David G. "Distinctive image features from scale-invariant
     keypoints". International journal of computer vision 60.2 (2004): 91-110.
-
-.. [wu11] Wu, Changchang, Sameer Agarwal, Brian Curless,
-    and Steven M. Seitz. "Multicore bundle adjustment."
-    Conference on Computer Vision and Pattern Recognition, 2011.
 
 .. [wu13] Wu, Changchang. "Towards linear-time incremental structure from
     motion." International Conference 3D Vision, 2013.

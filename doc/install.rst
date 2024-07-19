@@ -52,9 +52,6 @@ First, checkout the latest source code::
 
     git clone https://github.com/colmap/colmap
 
-The latest stable version lives in the ``master`` branch and the latest
-development version lives in the ``dev`` branch.
-
 On Linux and Mac it is generally recommended to follow the installation
 instructions below, which use the system package managers to install the
 required dependencies. Alternatively, there is a Python build script that builds
@@ -72,93 +69,106 @@ Dependencies from the default Ubuntu repositories::
     sudo apt-get install \
         git \
         cmake \
+        ninja-build \
         build-essential \
         libboost-program-options-dev \
         libboost-filesystem-dev \
         libboost-graph-dev \
         libboost-system-dev \
-        libboost-test-dev \
         libeigen3-dev \
-        libsuitesparse-dev \
+        libflann-dev \
         libfreeimage-dev \
+        libmetis-dev \
         libgoogle-glog-dev \
-        libgflags-dev \
+        libgtest-dev \
+        libsqlite3-dev \
         libglew-dev \
         qtbase5-dev \
         libqt5opengl5-dev \
-        libcgal-dev
-
-Under Ubuntu 16.04/18.04 the CMake configuration scripts of CGAL are broken and
-you must also install the CGAL Qt5 package::
-
-    sudo apt-get install libcgal-qt5-dev
-
-Install `Ceres Solver <http://ceres-solver.org/>`_::
-
-    sudo apt-get install libatlas-base-dev libsuitesparse-dev
-    git clone https://ceres-solver.googlesource.com/ceres-solver
-    cd ceres-solver
-    git checkout $(git describe --tags) # Checkout the latest release
-    mkdir build
-    cd build
-    cmake .. -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF
-    make -j
-    sudo make install
+        libcgal-dev \
+        libceres-dev
 
 Configure and compile COLMAP::
 
     git clone https://github.com/colmap/colmap.git
     cd colmap
-    git checkout dev
     mkdir build
     cd build
-    cmake ..
-    make -j
-    sudo make install
+    cmake .. -GNinja
+    ninja
+    sudo ninja install
 
 Run COLMAP::
 
     colmap -h
     colmap gui
 
+To compile with **CUDA support**, also install Ubuntu's default CUDA package::
+
+    sudo apt-get install -y \
+        nvidia-cuda-toolkit \
+        nvidia-cuda-toolkit-gcc
+
+Or, manually install the latest CUDA from NVIDIA's homepage. During CMake configuration
+specify `CMAKE_CUDA_ARCHITECTURES` as "native", if you want to run COLMAP on your
+current machine only (default), "all"/"all-major" to be able to distribute to other
+machines, or a specific CUDA architecture like "75", etc.
+
+Under **Ubuntu 18.04**, the CMake configuration scripts of CGAL are broken and
+you must also install the CGAL Qt5 package::
+
+    sudo apt-get install libcgal-qt5-dev
+
+Under **Ubuntu 22.04**, there is a problem when compiling with Ubuntu's default CUDA
+package and GCC, and you must compile against GCC 10::
+
+    sudo apt-get install gcc-10 g++-10
+    export CC=/usr/bin/gcc-10
+    export CXX=/usr/bin/g++-10
+    export CUDAHOSTCXX=/usr/bin/g++-10
+    # ... and then run CMake against COLMAP's sources.
 
 Mac
 ---
 
-*Recommended dependencies:* CUDA (at least version 7.X)
-
 Dependencies from `Homebrew <http://brew.sh/>`_::
 
     brew install \
-        git \
         cmake \
+        ninja \
         boost \
         eigen \
+        flann \
         freeimage \
+        metis \
         glog \
-        gflags \
-        suite-sparse \
+        googletest \
         ceres-solver \
         qt5 \
         glew \
-        cgal
+        cgal \
+        sqlite3
 
 Configure and compile COLMAP::
 
     git clone https://github.com/colmap/colmap.git
     cd colmap
-    git checkout dev
+    export PATH="/usr/local/opt/qt@5/bin:$PATH"
     mkdir build
     cd build
-    cmake .. -DQt5_DIR=/usr/local/opt/qt/lib/cmake/Qt5
-    make
-    sudo make install
+    cmake .. -GNinja -DQt5_DIR=/usr/local/opt/qt/lib/cmake/Qt5
+    ninja
+    sudo ninja install
+
+On Macs with ARM the brew paths are different so you need this
+
+    cmake .. -GNinja -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/flann;/opt/homebrew/opt/metis;/opt/homebrew/opt/suite-sparse;/opt/homebrew/opt/qt@5;/opt/homebrew/opt/freeimage"
 
 If you have Qt 6 installed on your system as well, you might have to temporarily
-link your Qt 5 installation while configuring CMake:
+link your Qt 5 installation while configuring CMake::
 
     brew link qt5
-    ... cmake configuration
+    cmake configuration (from previous code block)
     brew unlink qt5
 
 Run COLMAP::
@@ -184,6 +194,9 @@ To compile CUDA for multiple compute architectures, please use::
     .\vcpkg install colmap[cuda-redist]:x64-windows
 
 Please refer to the next section for more details.
+
+**Visual Studio 2022**  has some known compiler bugs that crash when
+compiling COLMAP's source code.
 
 
 VCPKG
@@ -211,54 +224,14 @@ the latest commit in the dev branch, you can use the following options::
 
 To modify the source code, you can further add ``--editable --no-downloads``.
 Or, if you want to build from another folder and use the dependencies from
-vcpkg, first run `./vcpkg integrate install` and then configure COLMAP as::
+vcpkg, first run `./vcpkg integrate install` (under Windows use pwsh and
+`./scripts/shell/enter_vs_dev_shell.ps1`) and then configure COLMAP as::
 
     cd path/to/colmap
     mkdir build
     cd build
-    cmake .. -DCMAKE_TOOLCHAIN_FILE=path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
-    cmake --build . --config release --target colmap_exe --parallel 24
-
-Alternatively, you can also use the Python build script. Please follow the
-instructions in the next section, but VCPKG is now the recommended approach.
-
-
-Build Script
-------------
-
-Alternative to the above solutions, COLMAP also ships with an automated Python
-build script. Note that VCPKG is the preferred way to achieve the same now.
-The build script installs COLMAP and its dependencies locally
-under Windows, Mac, and Linux. Note that under Mac and Linux, it is usually
-easier and faster to use the available package managers for the dependencies
-(see above). However, if you are on a (cluster) system without root access,
-this script might be useful. This script downloads the necessary dependencies
-automatically from the Internet. It assumes that CMake, Boost, Qt5, CUDA
-(optional), and CGAL (optional) are already installed on the system.
-E.g., under Windows you must specify the location of
-these libraries similar to this::
-
-    python scripts/python/build.py \
-        --build_path path/to/colmap/build \
-        --colmap_path path/to/colmap \
-        --boost_path "C:/local/boost_1_64_0/lib64-msvc-14.0" \
-        --qt_path "C:/Qt/5.9.3/msvc2015_64" \
-        --cuda_path "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v8.0" \
-        --cgal_path "C:/dev/CGAL-4.11.2/build"
-
-Note that under Windows you must use forward slashes for specifying the paths
-here. If you want to compile COLMAP using a specific Visual Studio version, you
-can for example specify ``--cmake_generator "Visual Studio 14"`` for Visual
-Studio 2015. If you want to open the COLMAP source code in Visual Studio, you
-can open the solution file in ``path/to/colmap/build/colmap/build``.
-If you use Homebrew under Mac, you can use the following command::
-
-    python scripts/python/build.py \
-        --build_path path/to/colmap/build \
-        --colmap_path path/to/colmap \
-        --qt_path /usr/local/opt/qt
-
-To see the full list of command-line options, pass the ``--help`` argument.
+    cmake .. -DCMAKE_TOOLCHAIN_FILE=path/to/vcpkg/scripts/buildsystems/vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
+    cmake --build . --config release --target colmap --parallel 24
 
 
 .. _installation-library:
@@ -267,54 +240,57 @@ To see the full list of command-line options, pass the ``--help`` argument.
 Library
 -------
 
-If you want to include and link COLMAP against your own library, the easiest
-way is to use CMake as a build configuration tool. COLMAP automatically installs
-all headers to ``${CMAKE_INSTALL_PREFIX}/include/colmap``, all libraries to
+If you want to include and link COLMAP against your own library, the easiest way
+is to use CMake as a build configuration tool. After configuring the COLMAP
+build and running `ninja/make install`, COLMAP automatically installs all
+headers to ``${CMAKE_INSTALL_PREFIX}/include/colmap``, all libraries to
 ``${CMAKE_INSTALL_PREFIX}/lib/colmap``, and the CMake configuration to
 ``${CMAKE_INSTALL_PREFIX}/share/colmap``.
 
 For example, compiling your own source code against COLMAP is as simple as
 using the following ``CMakeLists.txt``::
 
-    cmake_minimum_required(VERSION 2.8.11)
+    cmake_minimum_required(VERSION 3.10)
 
-    project(TestProject)
+    project(SampleProject)
 
-    find_package(COLMAP REQUIRED)
-    # or to require a specific version: find_package(COLMAP 3.4 REQUIRED)
-
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-
-    include_directories(${COLMAP_INCLUDE_DIRS})
-    link_directories(${COLMAP_LINK_DIRS})
+    find_package(colmap REQUIRED)
+    # or to require a specific version: find_package(colmap 3.4 REQUIRED)
 
     add_executable(hello_world hello_world.cc)
-    target_link_libraries(hello_world ${COLMAP_LIBRARIES})
+    target_link_libraries(hello_world colmap::colmap)
 
 with the source code ``hello_world.cc``::
 
     #include <cstdlib>
     #include <iostream>
 
-    #include <colmap/util/option_manager.h>
+    #include <colmap/controllers/option_manager.h>
     #include <colmap/util/string.h>
 
     int main(int argc, char** argv) {
         colmap::InitializeGlog(argv);
 
-        std::string input_path;
-        std::string output_path;
-
+        std::string message;
         colmap::OptionManager options;
-        options.AddRequiredOption("input_path", &input_path);
-        options.AddRequiredOption("output_path", &output_path);
+        options.AddRequiredOption("message", &message);
         options.Parse(argc, argv);
 
-        std::cout << colmap::StringPrintf("Hello %s!", "COLMAP") << std::endl;
+        std::cout << colmap::StringPrintf("Hello %s!", message.c_str()) << std::endl;
 
         return EXIT_SUCCESS;
     }
 
+Then compile and run your code as::
+    
+    mkdir build
+    cd build
+    export colmap_DIR=${CMAKE_INSTALL_PREFIX}/share/colmap
+    cmake .. -GNinja
+    ninja
+    ./hello_world --message "world"
+
+The sources of this example are stored under ``doc/sample-project``.
 
 ----------------
 AddressSanitizer
