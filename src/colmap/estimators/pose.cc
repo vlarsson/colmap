@@ -75,10 +75,7 @@ bool EstimateAbsolutePose(const AbsolutePoseEstimationOptions& options,
     poselib::BundleOptions poselib_bundle_opt;
     poselib_bundle_opt.loss_type = poselib::BundleOptions::TRIVIAL;
 
-    int config_flags = (1 << 0) | (1 << 1) | (0 << 2);
-    int config = 0 | (config_flags << 16);
-
-    poselib::RansacStats stats = poselib::estimate_absolute_pose_focal(points2D_normalized, points3D, poselib_ransac_opt, poselib_bundle_opt, &image, inlier_mask, config);
+    poselib::RansacStats stats = poselib::estimate_absolute_pose_focal(points2D_normalized, points3D, poselib_ransac_opt, poselib_bundle_opt, &image, inlier_mask);
 
     if (stats.num_inliers >= 15) { // TODO threshold?
       *cam_from_world =
