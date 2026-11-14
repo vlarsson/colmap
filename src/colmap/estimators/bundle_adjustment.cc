@@ -1229,4 +1229,125 @@ void DepthPriorBundleAdjuster(ceres::Problem* problem,
   }
 }
 
+namespace {
+
+// Log-depth residual with a per-image low-rank correction of the prior.
+// Parameter blocks: rotation (4), translation (3), point (3), theta (rank + 1).
+class LogDepthBasisCostFunction : public ceres::CostFunction {
+ public:
+  LogDepthBasisCostFunction(double depth, const double* basis, int rank)
+      : log_depth_(std::log(depth)), basis_(basis, basis + rank) {
+    set_num_residuals(1);
+    mutable_parameter_block_sizes()->push_back(4);
+    mutable_parameter_block_sizes()->push_back(3);
+    mutable_parameter_block_sizes()->push_back(3);
+    mutable_parameter_block_sizes()->push_back(rank + 1);
+  }
+
+  bool Evaluate(double const* const* parameters,
+                double* residuals,
+                double** jacobians) const override {
+    const int rank = static_cast<int>(basis_.size());
+    const double* theta = parameters[3];
+    double correction = theta[0];
+    for (int j = 0; j < rank; ++j) correction += basis_[j] * theta[j + 1];
+
+    // Depth and its derivatives w.r.t. rotation, translation and point.
+    double z = 0.0;
+    double jz_rot[4], jz_trans[3], jz_point[3];
+    {
+      using Jet4 = ceres::Jet<double, 10>;
+      Jet4 q[4], t3, X[3];
+      for (int i = 0; i < 4; ++i) q[i] = Jet4(parameters[0][i], i);
+      t3 = Jet4(parameters[1][2], 4 + 2);
+      for (int i = 0; i < 3; ++i) X[i] = Jet4(parameters[2][i], 7 + i);
+      const Eigen::Quaternion<Jet4> quat(q[3], q[0], q[1], q[2]);
+      const Eigen::Matrix<Jet4, 3, 1> point(X[0], X[1], X[2]);
+      const Jet4 zj = (quat * point)[2] + t3;
+      z = zj.a;
+      for (int i = 0; i < 4; ++i) jz_rot[i] = zj.v[i];
+      for (int i = 0; i < 3; ++i) jz_trans[i] = zj.v[4 + i];
+      for (int i = 0; i < 3; ++i) jz_point[i] = zj.v[7 + i];
+    }
+
+    if (z <= 0.0) {
+      residuals[0] = 0.0;
+      if (jacobians != nullptr) {
+        const int sizes[4] = {4, 3, 3, rank + 1};
+        for (int b = 0; b < 4; ++b) {
+          if (jacobians[b] != nullptr) {
+            std::fill(jacobians[b], jacobians[b] + sizes[b], 0.0);
+          }
+        }
+      }
+      return true;
+    }
+
+    residuals[0] = std::log(z) - log_depth_ - correction;
+    if (jacobians != nullptr) {
+      const double inv_z = 1.0 / z;
+      if (jacobians[0] != nullptr) {
+        for (int i = 0; i < 4; ++i) jacobians[0][i] = jz_rot[i] * inv_z;
+      }
+      if (jacobians[1] != nullptr) {
+        for (int i = 0; i < 3; ++i) jacobians[1][i] = jz_trans[i] * inv_z;
+      }
+      if (jacobians[2] != nullptr) {
+        for (int i = 0; i < 3; ++i) jacobians[2][i] = jz_point[i] * inv_z;
+      }
+      if (jacobians[3] != nullptr) {
+        jacobians[3][0] = -1.0;
+        for (int j = 0; j < rank; ++j) jacobians[3][j + 1] = -basis_[j];
+      }
+    }
+    return true;
+  }
+
+ private:
+  const double log_depth_;
+  const std::vector<double> basis_;
+};
+
+}  // namespace
+
+void DepthBasisBundleAdjuster(ceres::Problem* problem,
+                              image_t image_id,
+                              const std::vector<point3D_t>& point3D_ids,
+                              const std::vector<double>& depths,
+                              const std::vector<double>& basis,
+                              int rank,
+                              const std::vector<double>& loss_magnitudes,
+                              const std::vector<double>& loss_params,
+                              BundleAdjustmentOptions::LossFunctionType loss_type,
+                              double* theta_ptr,
+                              Reconstruction& reconstruction) {
+  const size_t n = point3D_ids.size();
+  if (depths.size() != n || loss_magnitudes.size() != n ||
+      loss_params.size() != n || basis.size() != n * static_cast<size_t>(rank)) {
+    throw std::runtime_error("Input vectors must have consistent sizes");
+  }
+
+  Image& image = reconstruction.Image(image_id);
+  double* cam_rot = image.CamFromWorld().rotation.coeffs().data();
+  double* cam_trans = image.CamFromWorld().translation.data();
+
+  for (size_t i = 0; i < n; ++i) {
+    Point3D& point3D = reconstruction.Point3D(point3D_ids[i]);
+    ceres::CostFunction* cost_function = new LogDepthBasisCostFunction(
+        depths[i], basis.data() + i * rank, rank);
+
+    BundleAdjustmentOptions loss_opts;
+    loss_opts.loss_function_type = loss_type;
+    loss_opts.loss_function_scale = loss_params[i];
+    loss_opts.loss_function_magnitude = loss_magnitudes[i];
+
+    problem->AddResidualBlock(cost_function,
+                              loss_opts.CreateLossFunction(),
+                              cam_rot,
+                              cam_trans,
+                              point3D.xyz.data(),
+                              theta_ptr);
+  }
+}
+
 }  // namespace colmap

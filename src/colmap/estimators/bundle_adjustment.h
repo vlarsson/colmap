@@ -262,6 +262,23 @@ void DepthPriorBundleAdjuster(ceres::Problem* problem,
                               bool fix_shift = false,
                               bool fix_scale = false);
 
+// Adds a low-rank log-depth prior to the bundle adjustment problem:
+//   r_k = log z_k - log d_k - theta[0] - sum_j basis_k[j] * theta[1 + j],
+// where z_k is the depth of the point in the camera, d_k the prior depth at the
+// keypoint, basis_k the (rank r) basis values at the keypoint (row-major,
+// point3D_ids.size() x rank) and theta a per-image block of size rank + 1.
+void DepthBasisBundleAdjuster(ceres::Problem* problem,
+                              image_t image_id,
+                              const std::vector<point3D_t>& point3D_ids,
+                              const std::vector<double>& depths,
+                              const std::vector<double>& basis,
+                              int rank,
+                              const std::vector<double>& loss_magnitudes,
+                              const std::vector<double>& loss_params,
+                              BundleAdjustmentOptions::LossFunctionType loss_type,
+                              double* theta_ptr,
+                              Reconstruction& reconstruction);
+
 void PrintSolverSummary(const ceres::Solver::Summary& summary,
                         const std::string& header);
 

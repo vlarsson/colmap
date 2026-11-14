@@ -240,4 +240,44 @@ void BindBundleAdjuster(py::module& m) {
         "logloss"_a = false,
         "fix_shift"_a = false,
         "fix_scale"_a = false);
+  m.def("create_depth_basis_bundle_adjuster",
+        [](ceres::Problem* problem,
+           image_t image_id,
+           const std::vector<point3D_t>& point3D_ids,
+           const std::vector<double>& depths,
+           py::array_t<double, py::array::c_style | py::array::forcecast> basis,
+           const std::vector<double>& loss_magnitudes,
+           const std::vector<double>& loss_params,
+           BAOpts::LossFunctionType loss_type,
+           py::array_t<double> theta,
+           Reconstruction& reconstruction) {
+          auto basis_buf = basis.request();
+          if (basis_buf.ndim != 2 ||
+              basis_buf.shape[0] != static_cast<ssize_t>(point3D_ids.size()))
+            throw std::runtime_error("basis must have shape (num_points, rank).");
+          const int rank = static_cast<int>(basis_buf.shape[1]);
+          auto theta_buf = theta.request();
+          if (theta_buf.ndim != 1 || theta_buf.shape[0] != rank + 1)
+            throw std::runtime_error("theta must have rank + 1 elements.");
+          if (!(theta.flags() & py::array::c_style) || !theta.writeable())
+            throw std::runtime_error("theta must be a writeable contiguous float64 array.");
+          const double* basis_ptr = static_cast<const double*>(basis_buf.ptr);
+          std::vector<double> basis_vec(basis_ptr,
+                                        basis_ptr + basis_buf.shape[0] * rank);
+          DepthBasisBundleAdjuster(problem, image_id, point3D_ids, depths,
+                                   basis_vec, rank, loss_magnitudes,
+                                   loss_params, loss_type,
+                                   static_cast<double*>(theta_buf.ptr),
+                                   reconstruction);
+        },
+        "problem"_a,
+        "image_id"_a,
+        "point3D_ids"_a,
+        "depths"_a,
+        "basis"_a,
+        "loss_magnitudes"_a,
+        "loss_params"_a,
+        "loss_type"_a,
+        "theta"_a,
+        "reconstruction"_a);
 }
